@@ -1,0 +1,566 @@
+<title>Tree Running</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;600&family=Atkinson+Hyperlegible:wght@400;700&display=swap">
+<style>
+/* Layout: a mock RuneLite client — game view with the overlay, then the plugin's side panel and its settings, stacking on phones. */
+:root {
+  /* Single dark look on purpose: RuneLite's client is always dark. */
+  color-scheme: dark;
+  --page: #141414;
+  --frame: #1b1b1b;
+  --panel: #282828;
+  --panel-2: #1e1e1e;
+  --line: #3a3a3a;
+  --text: #c8c8c8;
+  --white: #f2f2f2;
+  --muted: #8b8b8b;
+  --orange: #dc8a00;
+  --good: #6cc24a;
+  --bad: #e06c5a;
+  --yellow: #ffff00;
+  --overlay-bg: rgba(70, 61, 50, 0.78);
+  --overlay-edge: rgba(56, 48, 35, 1);
+  --grass-1: #2f4a22;
+  --grass-2: #3c5a2a;
+  --focus: #ffb84d;
+  --font-pixel: "IBM Plex Sans", "Segoe UI", Tahoma, sans-serif;
+  --font-ui: "Atkinson Hyperlegible", "Segoe UI", system-ui, sans-serif;
+}
+body {
+  background: var(--page);
+  color: var(--text);
+  font-family: var(--font-ui);
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 20px 32px;
+}
+* { box-sizing: border-box; }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+.intro { max-width: 1240px; margin: 0 auto 16px; display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: baseline; justify-content: space-between; }
+.intro h1 { margin: 0; font-family: var(--font-pixel); font-weight: 600; font-size: 1.75rem; color: var(--white); letter-spacing: 0.02em; text-wrap: balance; }
+.intro p { margin: 0; color: var(--muted); max-width: 62ch; line-height: 1.45; }
+.intro .tag { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--orange); border: 1px solid var(--orange); padding: 2px 8px; border-radius: 3px; }
+
+.client {
+  max-width: 1240px; margin: 0 auto;
+  display: grid; grid-template-columns: minmax(0, 1fr) 250px 250px;
+  border: 1px solid var(--line); background: var(--frame);
+}
+@media (max-width: 960px) { .client { grid-template-columns: minmax(0, 1fr) 250px; } .settings { grid-column: 1 / -1; border-left: 0; border-top: 1px solid var(--line); } }
+@media (max-width: 640px) { .client { grid-template-columns: minmax(0, 1fr); } .side { border-left: 0; border-top: 1px solid var(--line); } }
+
+/* ---------- game view ---------- */
+.game { position: relative; min-height: 560px; overflow: hidden;
+  background:
+    radial-gradient(ellipse at 70% 65%, rgba(0,0,0,0.0) 0, rgba(0,0,0,0.35) 70%),
+    repeating-linear-gradient(115deg, var(--grass-1) 0 18px, var(--grass-2) 18px 36px);
+}
+.patch-art { position: absolute; right: 12%; bottom: 22%; width: 150px; height: 110px; }
+.patch-art .soil { position: absolute; inset: auto 0 0 0; height: 46px; background: #4a3420; border: 3px solid #2d2014; transform: skewX(-12deg); }
+.patch-art .trunk { position: absolute; left: 66px; bottom: 30px; width: 16px; height: 44px; background: #6b4426; }
+.patch-art .crown { position: absolute; left: 30px; bottom: 60px; width: 88px; height: 60px; border-radius: 50%; background: #2f7d2a; box-shadow: inset -10px -8px 0 #255f22, inset 8px 6px 0 #48a03a; }
+.osrs-overlay {
+  position: absolute; top: 12px; left: 12px; width: 300px; max-width: calc(100% - 24px);
+  background: var(--overlay-bg); border: 1px solid var(--overlay-edge); box-shadow: inset 0 0 0 1px rgba(90,82,69,1);
+  padding: 6px 8px; font-family: var(--font-pixel); font-size: 13px; line-height: 1.35; color: var(--white);
+  text-shadow: 1px 1px 0 #000;
+}
+.osrs-overlay .title { text-align: center; color: var(--good); margin-bottom: 2px; }
+.osrs-overlay .bank { color: #ff981f; }
+.osrs-overlay .step { color: var(--yellow); }
+.osrs-overlay .hint { color: #b0b0b0; }
+.osrs-overlay .done { color: var(--good); }
+.osrs-overlay .then { display: flex; justify-content: space-between; color: #b0b0b0; }
+.game-controls { position: absolute; left: 12px; right: 12px; bottom: 12px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.game-controls .clock { margin-left: auto; font-family: var(--font-pixel); color: var(--white); background: rgba(0,0,0,0.55); padding: 4px 8px; text-shadow: 1px 1px 0 #000; }
+.sim-btn { font: 600 13px/1 var(--font-ui); color: #1a1a1a; background: var(--orange); border: 0; padding: 9px 12px; border-radius: 3px; cursor: pointer; }
+.sim-btn.secondary { background: rgba(0,0,0,0.6); color: var(--white); border: 1px solid #5a5a5a; }
+.sim-btn:hover { filter: brightness(1.1); }
+.toast { position: absolute; left: 50%; top: 45%; transform: translate(-50%, -50%); font-family: var(--font-pixel); color: var(--yellow); text-shadow: 1px 1px 0 #000; font-size: 15px; pointer-events: none; opacity: 0; transition: opacity .2s; }
+.toast.show { opacity: 1; }
+@media (prefers-reduced-motion: reduce) { .toast { transition: none; } }
+
+/* ---------- RuneLite panels ---------- */
+.side, .settings { border-left: 1px solid var(--line); background: var(--panel); display: flex; flex-direction: column; min-width: 0; }
+.panel-head { display: flex; align-items: center; gap: 8px; padding: 10px; background: var(--panel-2); border-bottom: 1px solid var(--line); font-family: var(--font-pixel); color: var(--white); }
+.panel-head svg { flex: none; }
+.tabs { display: grid; grid-template-columns: repeat(4, 1fr); background: var(--panel-2); }
+.tabs button { font: 13px var(--font-pixel); color: var(--muted); background: var(--panel-2); border: 0; border-bottom: 2px solid transparent; padding: 8px 2px; cursor: pointer; }
+.tabs button[aria-selected="true"] { color: var(--white); border-bottom-color: var(--orange); background: var(--panel); }
+.tab-body { padding: 10px; font-family: var(--font-pixel); font-size: 12.5px; line-height: 1.4; overflow-y: auto; max-height: 640px; display: flex; flex-direction: column; gap: 4px; }
+.h { color: var(--white); font-weight: 600; margin-top: 6px; }
+.h:first-child { margin-top: 0; }
+.h.loc { color: var(--orange); }
+.muted { color: var(--muted); }
+.big { color: var(--good); font-size: 22px; font-weight: 600; }
+.row { display: flex; justify-content: space-between; gap: 8px; }
+.row span:last-child { color: var(--white); font-variant-numeric: tabular-nums; text-align: right; }
+.bar { position: relative; height: 18px; background: var(--panel-2); border: 1px solid var(--line); }
+.bar i { position: absolute; inset: 0 auto 0 0; background: var(--good); opacity: .85; }
+.bar b { position: relative; display: block; text-align: center; color: var(--white); font-weight: 400; line-height: 16px; text-shadow: 1px 1px 0 #000; }
+.rl-btn { font: 12.5px var(--font-pixel); color: var(--white); background: var(--panel-2); border: 1px solid var(--line); padding: 6px 8px; cursor: pointer; }
+.rl-btn:hover:not(:disabled) { background: #333; }
+.rl-btn:disabled { color: #5d5d5d; cursor: default; }
+.btn-row { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+.check { display: flex; gap: 6px; align-items: flex-start; cursor: pointer; color: var(--white); }
+.check input { accent-color: var(--orange); margin: 2px 0 0; }
+.check.notdue { color: var(--muted); cursor: default; }
+.grid { display: grid; grid-template-columns: minmax(0, 1fr) 44px 48px; gap: 2px 6px; font-variant-numeric: tabular-nums; }
+.grid .n { text-align: right; }
+.grid .hd { color: var(--text); }
+.short { color: var(--bad); } .ok { color: var(--good); }
+.bankline { color: var(--orange); margin-top: 6px; }
+.route { color: var(--muted); }
+
+/* ---------- settings (config panel) ---------- */
+.cfg { padding: 10px; display: flex; flex-direction: column; gap: 10px; font-family: var(--font-pixel); font-size: 12.5px; overflow-y: auto; max-height: 690px; }
+.cfg details { border-top: 1px solid var(--line); padding-top: 8px; }
+.cfg summary { color: var(--orange); cursor: pointer; list-style: none; display: flex; justify-content: space-between; }
+.cfg summary::after { content: "+"; color: var(--muted); }
+.cfg details[open] summary::after { content: "−"; }
+.cfg .fields { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+.field { display: flex; justify-content: space-between; align-items: center; gap: 8px; color: var(--text); }
+.field select, .field input[type=number] { font: 12.5px var(--font-pixel); background: var(--panel-2); color: var(--white); border: 1px solid var(--line); padding: 3px 4px; width: 118px; flex: none; }
+.field input[type=checkbox] { accent-color: var(--orange); }
+.req { color: var(--muted); font-size: 11px; display: block; }
+.group { color: var(--white); font-weight: 600; margin-top: 4px; }
+.group:first-child { margin-top: 0; }
+.legend { max-width: 1240px; margin: 14px auto 0; color: var(--muted); font-size: 0.875rem; line-height: 1.5; display: flex; flex-wrap: wrap; gap: 6px 24px; }
+.legend b { color: var(--text); font-weight: 700; }
+</style>
+
+<header class="intro">
+  <h1>Tree Running</h1>
+  <span class="tag">Preview · sample data</span>
+  <p>A working preview of the RuneLite plugin. It starts from a sample account at 89 Farming with a small sample bank. Change crops in Settings, tick patches in the Run tab, or use the buttons in the game view to plant patches and move to the next day.</p>
+</header>
+
+<main class="client">
+  <section class="game" aria-label="Game view with the checklist overlay">
+    <div class="patch-art" aria-hidden="true"><div class="soil"></div><div class="trunk"></div><div class="crown"></div></div>
+    <div class="osrs-overlay" id="overlay" aria-live="polite"></div>
+    <div class="toast" id="toast" aria-hidden="true"></div>
+    <div class="game-controls">
+      <button class="sim-btn" id="plantBtn" type="button">Simulate planting</button>
+      <button class="sim-btn secondary" id="dayBtn" type="button">Next day</button>
+      <span class="clock" id="clock"></span>
+    </div>
+  </section>
+
+  <section class="side" aria-label="Plugin side panel">
+    <div class="panel-head">
+      <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAABHUlEQVR4nJWSsUrDUBSGv9RsLeQOwSGBpl3qVHGor+CQQRD6ND6AW9/EyaGgo6sOYieDUCs0g2S4ATvKdfHE5N4Q6z9dzuE7/3/vuR6WkjQ2dk20WW49u1YVBBxdJABMjxRno2MWt/cA6KcCvd45g3yBbRDg7u25clIn4a9tGhsZ4tfjCCzg6kU34rYN8Wx3kQ3bkiv5dmMfsK5evfhfGH62kKSxUeN+844dEIBe79gst56zRjXud6ewVul8DBl0+nHAJAoAyPKSh8OvBtip+WxodPFqQjUw9fPl+dT5pa3T5rOhEXdRlpdMooCrm1WD6f2VJstLACZRUJ3rcv6BuNtOban2SiC6fnz3srzEfoeGS6gGVbPQn877tPW/AddOiG7uwDuWAAAAAElFTkSuQmCC" width="16" height="16" alt="" style="image-rendering: pixelated">
+      Tree Running
+    </div>
+    <div class="tabs" role="tablist">
+      <button role="tab" id="tab-xp" aria-selected="true" aria-controls="body" data-tab="xp">XP</button>
+      <button role="tab" id="tab-run" aria-selected="false" aria-controls="body" data-tab="run">Run</button>
+      <button role="tab" id="tab-sup" aria-selected="false" aria-controls="body" data-tab="sup">Supplies</button>
+      <button role="tab" id="tab-inv" aria-selected="false" aria-controls="body" data-tab="inv">Inventory</button>
+    </div>
+    <div class="tab-body" id="body" role="tabpanel"></div>
+  </section>
+
+  <section class="settings" aria-label="Plugin settings">
+    <div class="panel-head">Settings</div>
+    <form class="cfg" id="cfg" onsubmit="return false">
+      <details open><summary>Crops</summary><div class="fields">
+        <label class="field">Tree patches <select id="treeCrop"></select></label>
+        <label class="field">Fruit tree patches <select id="fruitCrop"></select></label>
+        <label class="field">Hardwood patches <select id="hardwoodCrop"></select></label>
+      </div></details>
+      <details open><summary>Goal</summary><div class="fields">
+        <label class="field">Goal level <input type="number" id="goalLevel" min="90" max="99" value="99"></label>
+        <label class="field">Runs per day <input type="number" id="runsPerDay" min="1" max="4" value="1"></label>
+      </div></details>
+      <details><summary>Inventory</summary><div class="fields">
+        <label class="field">Always-carried slots <input type="number" id="reservedSlots" min="0" max="20" value="3"></label>
+        <label class="field">Pick fruit <input type="checkbox" id="pickProduce" checked></label>
+      </div></details>
+      <details><summary>Overlay</summary><div class="fields">
+        <label class="field">Show checklist overlay <input type="checkbox" id="showOverlay" checked></label>
+        <label class="field">Only during a run <input type="checkbox" id="overlayOnlyDuringRun"></label>
+      </div></details>
+      <details open><summary>Patches</summary><div class="fields" id="patchFields"></div></details>
+    </form>
+  </section>
+</main>
+
+<div class="legend">
+  <span><b>Simulate planting</b> stands in for playing. In game the plugin ticks the exact patch you plant, in any order, with no clicking.</span>
+  <span><b>Next day</b> moves the clock 24 hours, so hardwood, redwood and Hespori come back when they've grown.</span>
+  <span>Numbers use the same data and math as the plugin.</span>
+</div>
+
+<script>
+const DATA = {"crops":[{"key":"OAK","name":"Oak","type":"TREE","level":15,"xp":481.3,"growth":200,"planted":"Oak sapling","payment":"Tomatoes(5)","paymentQty":1,"produce":null,"seedOnly":false},{"key":"WILLOW","name":"Willow","type":"TREE","level":30,"xp":1481.5,"growth":280,"planted":"Willow sapling","payment":"Apples(5)","paymentQty":1,"produce":null,"seedOnly":false},{"key":"MAPLE","name":"Maple","type":"TREE","level":45,"xp":3448.4,"growth":320,"planted":"Maple sapling","payment":"Oranges(5)","paymentQty":1,"produce":null,"seedOnly":false},{"key":"YEW","name":"Yew","type":"TREE","level":60,"xp":7150.9,"growth":400,"planted":"Yew sapling","payment":"Cactus spine","paymentQty":10,"produce":null,"seedOnly":false},{"key":"MAGIC","name":"Magic","type":"TREE","level":75,"xp":13913.8,"growth":480,"planted":"Magic sapling","payment":"Coconut","paymentQty":25,"produce":null,"seedOnly":false},{"key":"APPLE","name":"Apple","type":"FRUIT_TREE","level":27,"xp":1272.5,"growth":960,"planted":"Apple sapling","payment":"Sweetcorn","paymentQty":9,"produce":"Cooking apple","seedOnly":false},{"key":"BANANA","name":"Banana","type":"FRUIT_TREE","level":33,"xp":1841.5,"growth":960,"planted":"Banana sapling","payment":"Apples(5)","paymentQty":4,"produce":"Banana","seedOnly":false},{"key":"ORANGE","name":"Orange","type":"FRUIT_TREE","level":39,"xp":2586.7,"growth":960,"planted":"Orange sapling","payment":"Strawberries(5)","paymentQty":3,"produce":"Orange","seedOnly":false},{"key":"CURRY","name":"Curry","type":"FRUIT_TREE","level":42,"xp":3036.9,"growth":960,"planted":"Curry sapling","payment":"Bananas(5)","paymentQty":5,"produce":"Curry leaf","seedOnly":false},{"key":"PINEAPPLE","name":"Pineapple","type":"FRUIT_TREE","level":51,"xp":4791.7,"growth":960,"planted":"Pineapple sapling","payment":"Watermelon","paymentQty":10,"produce":"Pineapple","seedOnly":false},{"key":"PAPAYA","name":"Papaya","type":"FRUIT_TREE","level":57,"xp":6453.9,"growth":960,"planted":"Papaya sapling","payment":"Pineapple","paymentQty":10,"produce":"Papaya fruit","seedOnly":false},{"key":"PALM","name":"Palm","type":"FRUIT_TREE","level":68,"xp":10509.6,"growth":960,"planted":"Palm sapling","payment":"Papaya fruit","paymentQty":15,"produce":"Coconut","seedOnly":false},{"key":"DRAGONFRUIT","name":"Dragonfruit","type":"FRUIT_TREE","level":81,"xp":17895.0,"growth":960,"planted":"Dragonfruit sapling","payment":"Coconut","paymentQty":15,"produce":"Dragonfruit","seedOnly":false},{"key":"TEAK","name":"Teak","type":"HARDWOOD","level":35,"xp":7325.0,"growth":4480,"planted":"Teak sapling","payment":"Limpwurt root","paymentQty":15,"produce":null,"seedOnly":false},{"key":"MAHOGANY","name":"Mahogany","type":"HARDWOOD","level":55,"xp":15783.0,"growth":5120,"planted":"Mahogany sapling","payment":"Yanillian hops","paymentQty":25,"produce":null,"seedOnly":false},{"key":"CAMPHOR","name":"Camphor","type":"HARDWOOD","level":66,"xp":17928.0,"growth":5120,"planted":"Camphor sapling","payment":"White berries","paymentQty":10,"produce":null,"seedOnly":false},{"key":"IRONWOOD","name":"Ironwood","type":"HARDWOOD","level":80,"xp":20525.0,"growth":5120,"planted":"Ironwood sapling","payment":"Curry leaf","paymentQty":10,"produce":null,"seedOnly":false},{"key":"ROSEWOOD","name":"Rosewood","type":"HARDWOOD","level":92,"xp":23352.0,"growth":6400,"planted":"Rosewood sapling","payment":"Dragonfruit","paymentQty":8,"produce":null,"seedOnly":false},{"key":"CALQUAT","name":"Calquat","type":"CALQUAT","level":72,"xp":12516.5,"growth":1280,"planted":"Calquat sapling","payment":"Poison ivy berries","paymentQty":8,"produce":"Calquat fruit","seedOnly":false},{"key":"CELASTRUS","name":"Celastrus","type":"CELASTRUS","level":85,"xp":14400.5,"growth":800,"planted":"Celastrus sapling","payment":"Potato cactus","paymentQty":8,"produce":"Celastrus bark","seedOnly":false},{"key":"REDWOOD","name":"Redwood","type":"REDWOOD","level":90,"xp":22680.0,"growth":6400,"planted":"Redwood sapling","payment":"Dragonfruit","paymentQty":6,"produce":null,"seedOnly":false},{"key":"HESPORI","name":"Hespori","type":"HESPORI","level":65,"xp":12662.0,"growth":1920,"planted":"Hespori seed","payment":null,"paymentQty":0,"produce":null,"seedOnly":true}],"steps":[{"key":"FARMING_GUILD","name":"Farming Guild","travel":"Jewellery box: Skills necklace → Farming Guild (or house spirit tree)","bank":"Farming Guild bank (inside the guild)","carry":null},{"key":"GNOME_STRONGHOLD","name":"Gnome Stronghold","travel":"House spirit tree → Gnome Stronghold","bank":"Grand Tree bank","carry":null},{"key":"TREE_GNOME_VILLAGE","name":"Tree Gnome Village","travel":"Spirit tree → Tree Gnome Village, squeeze through the railing, follow Elkoy, run south-west","bank":null,"carry":null},{"key":"CATHERBY","name":"Catherby","travel":"Portal nexus → Camelot, run to the Catherby beach patch","bank":"Catherby bank","carry":null},{"key":"BRIMHAVEN","name":"Brimhaven","travel":"House spirit tree → Brimhaven, run west","bank":null,"carry":null},{"key":"TAI_BWO_WANNAI","name":"Tai Bwo Wannai","travel":"Run south from Brimhaven to the calquat patch","bank":null,"carry":null},{"key":"FALADOR","name":"Falador Park","travel":"Jewellery box: Ring of wealth → Falador Park","bank":"Falador West bank","carry":null},{"key":"TAVERLEY","name":"Taverley","travel":"Falador wall shortcut west (66 Agility)","bank":null,"carry":null},{"key":"VARROCK","name":"Varrock Castle","travel":"Portal nexus → Varrock","bank":"Varrock West bank","carry":null},{"key":"LUMBRIDGE","name":"Lumbridge","travel":"Portal nexus → Lumbridge, run west of the castle","bank":"Lumbridge Castle bank (top floor)","carry":null},{"key":"NEMUS_RETREAT","name":"Nemus Retreat","travel":"Pendant of Ates → Nemus Retreat, run north (or quetzal to Auburnvale)","bank":null,"carry":"Pendant of Ates"},{"key":"KASTORI","name":"Kastori","travel":"Quetzal or Pendant of Ates → Kastori (fruit tree, then calquat)","bank":null,"carry":"Pendant of Ates"},{"key":"LOCUS_OASIS","name":"Locus Oasis","travel":"Fairy ring AJP, run south-east","bank":null,"carry":null},{"key":"LLETYA","name":"Lletya","travel":"Teleport crystal → Lletya, run south-east","bank":"Lletya bank","carry":"Teleport crystal"},{"key":"SUMMER_SHORE","name":"The Summer Shore","travel":"Fairy ring CJQ, run south then west","bank":null,"carry":null},{"key":"ANGLERS_RETREAT","name":"Anglers' Retreat","travel":"Sail or take the rowboat from Corsair Cove (51 Sailing)","bank":null,"carry":null},{"key":"FOSSIL_ISLAND","name":"Fossil Island","travel":"Digsite pendant → Fossil Island, walk to the Mushroom Forest","bank":null,"carry":"Digsite pendant"}],"fallbackBank":"Teleport to house → jewellery box: Ring of dueling → Castle Wars bank","locations":[{"key":"TREE_FARMING_GUILD","type":"TREE","step":"FARMING_GUILD","count":1,"patchName":null,"req":"65 Farming"},{"key":"TREE_GNOME_STRONGHOLD","type":"TREE","step":"GNOME_STRONGHOLD","count":1,"patchName":null,"req":null},{"key":"TREE_FALADOR","type":"TREE","step":"FALADOR","count":1,"patchName":null,"req":null},{"key":"TREE_TAVERLEY","type":"TREE","step":"TAVERLEY","count":1,"patchName":null,"req":"66 Agility for the Falador wall shortcut"},{"key":"TREE_VARROCK","type":"TREE","step":"VARROCK","count":1,"patchName":null,"req":null},{"key":"TREE_LUMBRIDGE","type":"TREE","step":"LUMBRIDGE","count":1,"patchName":null,"req":null},{"key":"TREE_NEMUS_RETREAT","type":"TREE","step":"NEMUS_RETREAT","count":1,"patchName":null,"req":"Children of the Sun"},{"key":"FRUIT_FARMING_GUILD","type":"FRUIT_TREE","step":"FARMING_GUILD","count":1,"patchName":null,"req":"85 Farming"},{"key":"FRUIT_GNOME_STRONGHOLD","type":"FRUIT_TREE","step":"GNOME_STRONGHOLD","count":1,"patchName":null,"req":null},{"key":"FRUIT_TREE_GNOME_VILLAGE","type":"FRUIT_TREE","step":"TREE_GNOME_VILLAGE","count":1,"patchName":null,"req":"Tree Gnome Village (for the spirit tree)"},{"key":"FRUIT_CATHERBY","type":"FRUIT_TREE","step":"CATHERBY","count":1,"patchName":null,"req":null},{"key":"FRUIT_BRIMHAVEN","type":"FRUIT_TREE","step":"BRIMHAVEN","count":1,"patchName":null,"req":null},{"key":"FRUIT_KASTORI","type":"FRUIT_TREE","step":"KASTORI","count":1,"patchName":null,"req":"Children of the Sun"},{"key":"FRUIT_LLETYA","type":"FRUIT_TREE","step":"LLETYA","count":1,"patchName":null,"req":"Mourning's End Part I (partial)"},{"key":"CALQUAT_TAI_BWO_WANNAI","type":"CALQUAT","step":"TAI_BWO_WANNAI","count":1,"patchName":null,"req":null},{"key":"CALQUAT_KASTORI","type":"CALQUAT","step":"KASTORI","count":1,"patchName":null,"req":"Children of the Sun"},{"key":"CALQUAT_SUMMER_SHORE","type":"CALQUAT","step":"SUMMER_SHORE","count":1,"patchName":null,"req":"Troubled Tortugans (partial); 50 Agility via fairy ring"},{"key":"CELASTRUS_FARMING_GUILD","type":"CELASTRUS","step":"FARMING_GUILD","count":1,"patchName":null,"req":"85 Farming"},{"key":"REDWOOD_FARMING_GUILD","type":"REDWOOD","step":"FARMING_GUILD","count":1,"patchName":null,"req":"90 Farming"},{"key":"HESPORI_FARMING_GUILD","type":"HESPORI","step":"FARMING_GUILD","count":1,"patchName":null,"req":"65 Farming"},{"key":"HARDWOOD_LOCUS_OASIS","type":"HARDWOOD","step":"LOCUS_OASIS","count":1,"patchName":null,"req":"The Ribbiting Tale of a Lily Pad Labour Dispute"},{"key":"HARDWOOD_ANGLERS_RETREAT","type":"HARDWOOD","step":"ANGLERS_RETREAT","count":1,"patchName":null,"req":"51 Sailing (rowboat route: build it with 50 Construction)"},{"key":"HARDWOOD_FOSSIL_ISLAND_EAST","type":"HARDWOOD","step":"FOSSIL_ISLAND","count":1,"patchName":"East","req":"Bone Voyage"},{"key":"HARDWOOD_FOSSIL_ISLAND_MIDDLE","type":"HARDWOOD","step":"FOSSIL_ISLAND","count":1,"patchName":"Middle","req":"Bone Voyage"},{"key":"HARDWOOD_FOSSIL_ISLAND_WEST","type":"HARDWOOD","step":"FOSSIL_ISLAND","count":1,"patchName":"West","req":"Bone Voyage"}]};
+// JavaScript port of the plugin's planner (XpTable, RunPlanner, XpProjection,
+// SupplyCalculator, InventoryPlanner). Kept line-for-line with the Java so the preview
+// shows the same numbers. DATA is the JSON exported by ExportPreviewData.
+function makePlanner(DATA) {
+  const CROPS = Object.fromEntries(DATA.crops.map(c => [c.key, c]));
+  const STEPS = Object.fromEntries(DATA.steps.map((s, i) => [s.key, Object.assign({ order: i }, s)]));
+  const LOCS = DATA.locations.map((l, i) => Object.assign({ order: i }, l));
+
+  const XP = [0];
+  (function () {
+    let points = 0;
+    for (let level = 1; level < 127; level++) {
+      XP[level] = Math.floor(points / 4);
+      points += Math.floor(level + 300 * Math.pow(2, level / 7));
+    }
+  })();
+  const xpForLevel = l => XP[Math.max(1, Math.min(126, l))];
+  const levelForXp = xp => { let l = 1; while (l < 99 && xp >= XP[l + 1]) l++; return l; };
+
+  const interval = (crop, rpd) => Math.max(1, Math.ceil(crop.growth / (1440 / Math.max(1, rpd))));
+
+  // settings: { crops: {TREE: key, ...}, enabled: Set(locKey), goalLevel, runsPerDay, reservedSlots, pickProduce }
+  const isEnabled = (s, loc) => s.enabled.has(loc.key) && !!s.crops[loc.type];
+  const cropFor = (s, type) => CROPS[s.crops[type]];
+
+  function buildTasks(s, level, plantedAt, now) {
+    const locs = LOCS.slice().sort((a, b) => STEPS[a.step].order - STEPS[b.step].order || a.order - b.order);
+    const between = 1440 / s.runsPerDay;
+    const tasks = [];
+    for (const loc of locs) {
+      if (!isEnabled(s, loc)) continue;
+      const crop = cropFor(s, loc.type);
+      for (let i = 0; i < loc.count; i++) {
+        const key = loc.key + '#' + i;
+        let due = true, note = null;
+        if (crop.level > level) { due = false; note = 'Needs ' + crop.level + ' Farming'; }
+        else if (crop.growth > between && plantedAt[key] != null) {
+          const readyAt = plantedAt[key] + crop.growth * 60000;
+          if (now < readyAt) { due = false; note = 'Ready in ' + fmtDuration(readyAt - now); }
+        }
+        tasks.push({ key, loc, index: i, crop, due, note, step: STEPS[loc.step] });
+      }
+    }
+    return tasks;
+  }
+
+  function fmtDuration(ms) {
+    const total = Math.floor(Math.max(0, ms) / 60000), h = Math.floor(total / 60), m = total % 60;
+    return h >= 24 ? Math.floor(h / 24) + 'd ' + (h % 24) + 'h' : h + 'h ' + m + 'm';
+  }
+
+  function simulate(currentXp, goalXp, s, maxRuns) {
+    const plantings = {}, last = {};
+    let xp = currentXp, run = 0;
+    while (xp < goalXp && run < maxRuns) {
+      run++;
+      const level = levelForXp(Math.floor(xp));
+      let gained = 0;
+      for (const loc of LOCS) {
+        if (!isEnabled(s, loc)) continue;
+        const crop = cropFor(s, loc.type);
+        if (crop.level > level) continue;
+        if (last[loc.key] != null && run - last[loc.key] < interval(crop, s.runsPerDay)) continue;
+        gained += crop.xp * loc.count;
+        plantings[crop.key] = (plantings[crop.key] || 0) + loc.count;
+        last[loc.key] = run;
+      }
+      if (gained <= 0) break;
+      xp += gained;
+    }
+    const reached = xp >= goalXp;
+    return { runs: run, reached, avg: run === 0 ? 0 : (Math.min(xp, goalXp) - currentXp) / run, plantings };
+  }
+  const toGoal = (xp, s) => simulate(xp, xpForLevel(s.goalLevel), s, 5000);
+  const forRuns = (xp, runs, s) => simulate(xp, Infinity, s, runs);
+
+  function supplies(plantings, have) {
+    const crops = [], payNeed = new Map();
+    for (const c of DATA.crops) {
+      const count = plantings[c.key];
+      if (!count) continue;
+      crops.push({ name: c.seedOnly ? c.planted : c.name, payment: false, need: count, have: have(c.key) });
+      if (c.payment) payNeed.set(c.payment, (payNeed.get(c.payment) || 0) + count * c.paymentQty);
+    }
+    const pays = [...payNeed].map(([name, need]) => ({ name, payment: true, need, have: have(name) }));
+    return crops.concat(pays);
+  }
+
+  function inventoryPlan(tasks, s) {
+    const byStep = new Map();
+    for (const t of tasks) if (t.due) { if (!byStep.has(t.step.key)) byStep.set(t.step.key, []); byStep.get(t.step.key).push(t); }
+    const carry = new Set(), payments = new Map(), produce = new Set();
+    for (const [stepKey, list] of byStep) {
+      if (STEPS[stepKey].carry) carry.add(STEPS[stepKey].carry);
+      for (const t of list) {
+        if (t.crop.payment) payments.set(t.crop.payment, (payments.get(t.crop.payment) || 0) + t.crop.paymentQty);
+        if (s.pickProduce && t.crop.produce) produce.add(t.crop.produce);
+      }
+    }
+    const picking = produce.size ? 6 : 0;
+    const fixed = s.reservedSlots + carry.size + payments.size + produce.size + picking;
+    const capacity = Math.max(1, 28 - fixed);
+    const legs = [];
+    let legSteps = [], withdraw = new Map(), slots = 0, bankAt = 'Any bank before you start', prev = null;
+    for (const [stepKey, list] of byStep) {
+      const step = STEPS[stepKey];
+      if (legSteps.length && slots + list.length > capacity) {
+        legs.push({ bankAt, steps: legSteps, withdraw, slots });
+        bankAt = bankBetween(prev, step);
+        legSteps = []; withdraw = new Map(); slots = 0;
+      }
+      legSteps.push(step);
+      for (const t of list) withdraw.set(t.crop.planted, (withdraw.get(t.crop.planted) || 0) + 1);
+      slots += list.length;
+      prev = step;
+    }
+    if (legSteps.length) legs.push({ bankAt, steps: legSteps, withdraw, slots });
+    return { carry: [...carry], payments, produce: [...produce], reserved: s.reservedSlots, picking, capacity, legs };
+  }
+
+  function bankBetween(finished, next) {
+    if (finished && finished.bank) return finished.bank + ' (after ' + finished.name + ')';
+    if (next.bank) return next.bank + ' (when you arrive at ' + next.name + ')';
+    return DATA.fallbackBank;
+  }
+
+  return { CROPS, STEPS, LOCS, xpForLevel, levelForXp, buildTasks, toGoal, forRuns, supplies, inventoryPlan, interval };
+}
+
+
+
+const P = makePlanner(DATA);
+const $ = id => document.getElementById(id);
+const fmt = n => Math.round(n).toLocaleString('en-US');
+
+// ---------- sample account ----------
+const START_XP = 4842295; // level 89
+const sim = {
+  xp: START_XP,
+  now: Date.UTC(2026, 9, 25, 17, 0),
+  active: false, startXp: 0,
+  done: new Set(), plantedAt: {}, runXp: [],
+  // Sample bank: crop rows count seeds/seedlings/saplings; payments by item name.
+  bank: { YEW: 60, PAPAYA: 400, CALQUAT: 20, CELASTRUS: 12, 'Cactus spine': 1200, 'Pineapple': 900, 'Poison ivy berries': 160, 'Potato cactus': 96 },
+};
+
+// ---------- settings ----------
+const choices = { treeCrop: 'TREE', fruitCrop: 'FRUIT_TREE', hardwoodCrop: 'HARDWOOD' };
+const defaults = { treeCrop: 'YEW', fruitCrop: 'PAPAYA', hardwoodCrop: 'IRONWOOD' };
+for (const [id, type] of Object.entries(choices)) {
+  const sel = $(id);
+  for (const c of DATA.crops.filter(c => c.type === type)) {
+    const o = document.createElement('option'); o.value = c.key; o.textContent = c.name + ' (' + c.level + ')';
+    if (c.key === defaults[id]) o.selected = true;
+    sel.appendChild(o);
+  }
+}
+const groupName = { TREE: 'Tree patches', FRUIT_TREE: 'Fruit tree patches', CALQUAT: 'Calquat patches', CELASTRUS: 'Celastrus', REDWOOD: 'Redwood', HESPORI: 'Hespori', HARDWOOD: 'Hardwood patches' };
+const groupOrder = ['TREE', 'FRUIT_TREE', 'CALQUAT', 'CELASTRUS', 'REDWOOD', 'HESPORI', 'HARDWOOD'];
+const toggleLocs = DATA.locations.slice().sort((a, b) => groupOrder.indexOf(a.type) - groupOrder.indexOf(b.type));
+let lastGroup = null;
+for (const l of toggleLocs) {
+  if (l.type !== lastGroup) {
+    lastGroup = l.type;
+    const g = document.createElement('div'); g.className = 'group'; g.textContent = groupName[l.type];
+    $('patchFields').appendChild(g);
+  }
+  const lab = document.createElement('label'); lab.className = 'field';
+  const step = P.STEPS[l.step].name + (l.patchName ? ' (' + l.patchName + ')' : '');
+  lab.innerHTML = '<span>' + step + (l.req ? '<span class="req">' + l.req + '</span>' : '') + '</span>';
+  const cb = document.createElement('input'); cb.type = 'checkbox'; cb.checked = true; cb.id = 'loc_' + l.key; cb.dataset.loc = l.key;
+  lab.appendChild(cb); $('patchFields').appendChild(lab);
+}
+
+function settings() {
+  const crops = { TREE: $('treeCrop').value, FRUIT_TREE: $('fruitCrop').value, HARDWOOD: $('hardwoodCrop').value };
+  crops.CALQUAT = 'CALQUAT'; crops.CELASTRUS = 'CELASTRUS'; crops.REDWOOD = 'REDWOOD'; crops.HESPORI = 'HESPORI';
+  const enabled = new Set(DATA.locations.filter(l => {
+    const cb = $('loc_' + l.key); return cb ? cb.checked : true;
+  }).map(l => l.key));
+  const clamp = (v, lo, hi, d) => { v = parseInt(v, 10); return isNaN(v) ? d : Math.max(lo, Math.min(hi, v)); };
+  return {
+    crops, enabled,
+    goalLevel: clamp($('goalLevel').value, 90, 99, 99),
+    runsPerDay: clamp($('runsPerDay').value, 1, 4, 1),
+    reservedSlots: clamp($('reservedSlots').value, 0, 20, 3),
+    pickProduce: $('pickProduce').checked,
+  };
+}
+
+// ---------- run tracking (mirrors the plugin) ----------
+function tasksNow(s) { return P.buildTasks(s, P.levelForXp(sim.xp), sim.plantedAt, sim.now); }
+function markDone(t, s) {
+  sim.done.add(t.key);
+  if (t.crop.growth > 1440 / s.runsPerDay) sim.plantedAt[t.key] = sim.now;
+}
+function beginRun() { sim.active = true; sim.startXp = sim.xp; sim.done.clear(); }
+function endRun() { if (!sim.active) return; const g = sim.xp - sim.startXp; if (g > 0) sim.runXp.push(g); sim.active = false; }
+function finishIfComplete(tasks) { if (tasks.every(t => !t.due || sim.done.has(t.key))) endRun(); }
+
+function plantNext() {
+  const s = settings(); const tasks = tasksNow(s);
+  const next = tasks.find(t => t.due && !sim.done.has(t.key));
+  if (!next) { toast('Nothing due. Try Next day.'); return; }
+  if (!sim.active) beginRun();
+  sim.xp += next.crop.xp; // in game: check-health + planting XP
+  markDone(next, s);
+  lastMatch = next.crop.name + ' – ' + next.step.name + (next.loc.patchName ? ' (' + next.loc.patchName + ')' : '');
+  toast('+' + fmt(next.crop.xp) + ' Farming XP');
+  finishIfComplete(tasks);
+  render();
+}
+function toggleTask(key) {
+  const s = settings(); const tasks = tasksNow(s);
+  if (sim.done.delete(key)) { render(); return; }
+  if (!sim.active) beginRun();
+  const t = tasks.find(t => t.key === key); if (t) markDone(t, s);
+  finishIfComplete(tasks); render();
+}
+function nextDay() { if (sim.active) endRun(); sim.now += 24 * 3600 * 1000; sim.done.clear(); toast('A day passes'); render(); }
+
+let toastTimer;
+function toast(msg) { const el = $('toast'); el.textContent = msg; el.classList.add('show'); clearTimeout(toastTimer); toastTimer = setTimeout(() => el.classList.remove('show'), 1100); }
+
+// ---------- render ----------
+let tab = 'xp';
+let lastMatch = null;
+const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+const row = (l, r) => '<div class="row"><span>' + esc(l) + '</span><span>' + esc(r) + '</span></div>';
+
+function compute() {
+  const s = settings();
+  const goalXp = P.xpForLevel(s.goalLevel);
+  const planned = P.toGoal(sim.xp, s);
+  const recent = sim.runXp.slice(-5);
+  const actual = recent.length ? recent.reduce((a, b) => a + b, 0) / recent.length : 0;
+  let runsLeft = actual > 0 ? (sim.xp >= goalXp ? 0 : Math.ceil((goalXp - sim.xp) / actual)) : (planned.reached ? planned.runs : -1);
+  const plantings = runsLeft > 0 ? P.forRuns(sim.xp, runsLeft, s).plantings : {};
+  const supplies = P.supplies(plantings, k => sim.bank[k] || 0);
+  const tasks = tasksNow(s);
+  const plan = P.inventoryPlan(tasks, s);
+  return { s, goalXp, planned, actual, counted: recent.length, runsLeft, supplies, tasks, plan, level: P.levelForXp(sim.xp) };
+}
+
+function renderXp(d) {
+  const lvl = Math.min(d.level, d.s.goalLevel), base = P.xpForLevel(lvl);
+  const pct = Math.max(0, Math.min(1, (sim.xp - base) / Math.max(1, d.goalXp - base)));
+  const remaining = Math.max(0, d.goalXp - sim.xp);
+  let h = '<div class="h">Level ' + d.level + ' → ' + d.s.goalLevel + '</div>'
+    + '<div class="bar"><i style="width:' + (pct * 100).toFixed(1) + '%"></i><b>' + fmt(remaining) + ' XP to go</b></div>';
+  if (remaining === 0) return h + '<div class="ok">Goal reached. Enjoy the cape!</div>';
+  if (d.runsLeft > 0) {
+    const days = Math.ceil(d.runsLeft / d.s.runsPerDay);
+    const date = new Date(sim.now + days * 86400000).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
+    h += '<div class="big">' + d.runsLeft + ' runs left</div>' + row('Days left', days) + row('Goal date', date)
+      + '<div class="muted">' + (d.actual > 0 ? 'Based on your last ' + d.counted + ' run' + (d.counted === 1 ? '' : 's') + '.' : 'Planned estimate. Finish a run to switch to your real XP.') + '</div>';
+  } else {
+    h += '<div class="short">Your current plan can\'t reach this goal. Check your crops and patches.</div>';
+  }
+  h += '<div class="h">XP per run</div>' + row('Your average', d.actual > 0 ? fmt(d.actual) : '–')
+    + row('Planned', fmt(d.planned.avg)) + row('Planned runs', d.planned.reached ? d.planned.runs : '–');
+  if (sim.active) h += row('This run so far', fmt(sim.xp - sim.startXp));
+  h += '<button class="rl-btn" type="button" data-act="clear">Clear run history</button>';
+  return h;
+}
+
+function renderRun(d) {
+  const due = d.tasks.filter(t => t.due), doneN = due.filter(t => sim.done.has(t.key)).length;
+  let h = '<div class="h">' + (sim.active ? 'Run in progress: ' + doneN + '/' + due.length : 'Ready: ' + due.length + ' patches due') + '</div>'
+    + '<div class="btn-row"><button class="rl-btn" type="button" data-act="new">New run</button><button class="rl-btn" type="button" data-act="finish"' + (sim.active ? '' : ' disabled') + '>Finish run</button></div>'
+    + '<div class="muted">Planting ticks off the exact patch you planted, in any order. Click to tick or untick by hand.</div>'
+    + (lastMatch ? '<div class="ok">Last planted: ' + esc(lastMatch) + '</div>' : '');
+  let step = null;
+  for (const t of d.tasks) {
+    if (t.step !== step) { step = t.step; h += '<div class="h loc">' + esc(step.name) + '</div><div class="muted">' + esc(step.travel) + '</div>'; }
+    const label = t.crop.name + ' – ' + ({ TREE: 'Tree', FRUIT_TREE: 'Fruit tree', CALQUAT: 'Calquat', CELASTRUS: 'Celastrus', HARDWOOD: 'Hardwood', REDWOOD: 'Redwood', HESPORI: 'Hespori' })[t.loc.type]
+      + (t.loc.patchName ? ' (' + t.loc.patchName + ')' : '') + (t.due ? '' : ' (' + t.note + ')');
+    h += '<label class="check' + (t.due ? '' : ' notdue') + '"><input type="checkbox" data-task="' + t.key + '"' + (sim.done.has(t.key) ? ' checked' : '') + (t.due ? '' : ' disabled') + '><span>' + esc(label) + '</span></label>';
+  }
+  if (!d.tasks.length) h += '<div class="muted">No patches enabled. Turn some on in Settings.</div>';
+  return h;
+}
+
+function renderSup(d) {
+  let h = '<div class="h">' + (d.runsLeft > 0 ? 'Needed for ' + d.runsLeft + ' runs' : 'Supplies') + '</div>'
+    + '<div class="muted">Crop rows count seeds, seedlings and saplings together. Bank counted when you last opened it, plus your inventory.</div>'
+    + '<div class="grid"><span class="hd">Item</span><span class="hd n">Have</span><span class="hd n">Need</span>';
+  let payHead = false, shortN = 0;
+  for (const l of d.supplies) {
+    if (l.payment && !payHead) { payHead = true; h += '</div><div class="h">Payments</div><div class="grid">'; }
+    const isShort = l.have < l.need; if (isShort) shortN++;
+    h += '<span>' + esc(l.name) + '</span><span class="n ' + (isShort ? 'short' : 'ok') + '">' + fmt(l.have) + '</span><span class="n">' + fmt(l.need) + '</span>';
+  }
+  h += '</div><div class="' + (shortN ? 'short' : 'ok') + '" style="margin-top:6px">' + (shortN ? shortN + ' items short (in red).' : 'You have everything you need.') + '</div>';
+  return h;
+}
+
+function renderInv(d) {
+  const p = d.plan;
+  let h = '<div class="h">Carry the whole run</div><div class="muted">' + p.reserved + ' slots for your own items (spade, coins, house teleport…)</div>';
+  for (const c of p.carry) h += row(c, '1');
+  for (const [name, qty] of p.payments) h += row(name + ' (noted)', fmt(qty));
+  if (p.produce.length) h += '<div class="muted">Keep ' + p.picking + ' slots free to pick each tree, then use the produce on the tool leprechaun. It notes it but doesn\'t bank it, so each noted stack stays in your inventory: ' + esc(p.produce.join(', ')) + '.</div>';
+  const stops = Math.max(0, p.legs.length - 1);
+  h += '<div class="h">' + p.capacity + ' slots for saplings · ' + stops + ' bank stop' + (stops === 1 ? '' : 's') + '</div>';
+  p.legs.forEach((leg, i) => {
+    h += '<div class="bankline">' + (i === 0 ? 'Start: ' : 'Bank: ') + esc(leg.bankAt) + '</div>';
+    for (const [name, qty] of leg.withdraw) h += row('Withdraw ' + name, qty);
+    h += '<div class="route">' + esc(leg.steps.map(s => s.name).join(' → ')) + '</div>';
+  });
+  if (!p.legs.length) h += '<div class="muted">Nothing is due right now.</div>';
+  return h;
+}
+
+function renderOverlay(d) {
+  const el = $('overlay');
+  if (!$('showOverlay').checked || !d.tasks.length || ($('overlayOnlyDuringRun').checked && !sim.active)) { el.hidden = true; return; }
+  el.hidden = false;
+  const due = d.tasks.filter(t => t.due), doneN = due.filter(t => sim.done.has(t.key)).length;
+  let h = '<div class="title">Tree run ' + doneN + '/' + due.length + '</div>';
+  const next = due.find(t => !sim.done.has(t.key));
+  if (!next) { el.innerHTML = h + '<div class="done">All due patches planted.</div>'; return; }
+  const step = next.step;
+  for (let i = 1; i < d.plan.legs.length; i++) {
+    const leg = d.plan.legs[i];
+    if (leg.steps[0] === step && !d.tasks.some(t => t.step === step && sim.done.has(t.key))) { h += '<div class="bank">Bank first: ' + esc(leg.bankAt) + '</div>'; break; }
+  }
+  h += '<div class="step">' + esc(step.name) + '</div><div class="hint">' + esc(step.travel) + '</div>';
+  for (const t of due.filter(t => t.step === step)) {
+    const isDone = sim.done.has(t.key);
+    h += '<div class="' + (isDone ? 'done' : '') + '">' + (isDone ? '[x] ' : '[ ] ') + esc(t.crop.name + ' ' + ({ TREE: 'tree', FRUIT_TREE: 'fruit tree', CALQUAT: 'calquat', CELASTRUS: 'celastrus', HARDWOOD: 'hardwood', REDWOOD: 'redwood', HESPORI: 'hespori' })[t.loc.type]) + (t.loc.patchName ? ' (' + t.loc.patchName + ')' : '') + '</div>';
+  }
+  let passed = false, after = null;
+  for (const t of due) { if (t.step === step) passed = true; else if (passed && !sim.done.has(t.key)) { after = t.step; break; } }
+  if (after) h += '<div class="then"><span>Then</span><span>' + esc(after.name) + '</span></div>';
+  el.innerHTML = h;
+}
+
+function render() {
+  const d = compute();
+  const body = $('body'); const scroll = body.scrollTop;
+  body.innerHTML = tab === 'xp' ? renderXp(d) : tab === 'run' ? renderRun(d) : tab === 'sup' ? renderSup(d) : renderInv(d);
+  body.scrollTop = scroll;
+  renderOverlay(d);
+  $('clock').textContent = new Date(sim.now).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' })
+    + ' · ' + fmt(sim.xp) + ' XP';
+}
+
+// ---------- wiring ----------
+document.querySelectorAll('.tabs button').forEach(b => b.addEventListener('click', () => {
+  tab = b.dataset.tab;
+  document.querySelectorAll('.tabs button').forEach(x => x.setAttribute('aria-selected', String(x === b)));
+  $('body').scrollTop = 0; render();
+}));
+$('body').addEventListener('change', e => { if (e.target.dataset.task) toggleTask(e.target.dataset.task); });
+$('body').addEventListener('click', e => {
+  const act = e.target.dataset && e.target.dataset.act;
+  if (act === 'new') { beginRun(); render(); }
+  else if (act === 'finish') { endRun(); render(); }
+  else if (act === 'clear') { sim.runXp = []; render(); }
+});
+$('cfg').addEventListener('input', render);
+$('cfg').addEventListener('change', render);
+$('plantBtn').addEventListener('click', plantNext);
+$('dayBtn').addEventListener('click', nextDay);
+render();
+</script>

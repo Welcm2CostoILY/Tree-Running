@@ -10,29 +10,24 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * What the player has chosen: which crop goes in each patch type, which patches they
- * use, their goal, and how they want their inventory planned.
+ * What the player has chosen: which crop goes in each patch type, which patches they use,
+ * their goal (always stored as an XP total) and how many runs they do a day.
  */
 public final class PlanSettings
 {
 	private final Map<PatchType, CropType> crops;
 	private final Set<PatchLocation> enabled;
-	private final int goalLevel;
+	private final int goalXp;
 	private final int runsPerDay;
-	private final int reservedSlots;
-	private final boolean pickProduce;
 
-	public PlanSettings(Map<PatchType, CropType> crops, Set<PatchLocation> enabled, int goalLevel,
-		int runsPerDay, int reservedSlots, boolean pickProduce)
+	public PlanSettings(Map<PatchType, CropType> crops, Set<PatchLocation> enabled, int goalXp, int runsPerDay)
 	{
 		this.crops = Collections.unmodifiableMap(new EnumMap<>(crops));
 		this.enabled = enabled.isEmpty()
 			? Collections.unmodifiableSet(EnumSet.noneOf(PatchLocation.class))
 			: Collections.unmodifiableSet(EnumSet.copyOf(enabled));
-		this.goalLevel = goalLevel;
+		this.goalXp = Math.max(1, goalXp);
 		this.runsPerDay = Math.max(1, runsPerDay);
-		this.reservedSlots = Math.max(0, reservedSlots);
-		this.pickProduce = pickProduce;
 	}
 
 	/** The crop for a patch type, or null if that patch type is switched off. */
@@ -46,28 +41,13 @@ public final class PlanSettings
 		return enabled.contains(location) && crops.get(location.getPatchType()) != null;
 	}
 
-	public int getGoalLevel()
-	{
-		return goalLevel;
-	}
-
 	public int getGoalXp()
 	{
-		return XpTable.xpForLevel(goalLevel);
+		return goalXp;
 	}
 
 	public int getRunsPerDay()
 	{
 		return runsPerDay;
-	}
-
-	public int getReservedSlots()
-	{
-		return reservedSlots;
-	}
-
-	public boolean isPickProduce()
-	{
-		return pickProduce;
 	}
 }

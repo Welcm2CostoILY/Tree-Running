@@ -1,6 +1,6 @@
 package com.treerunning;
 
-import com.treerunning.core.InventoryPlanner;
+import com.treerunning.core.XpTable;
 import com.treerunning.core.PlanSettings;
 import com.treerunning.core.RunPlanner;
 import com.treerunning.core.RunTask;
@@ -95,10 +95,9 @@ public class ExportPreviewData
 			map.put(PatchType.CELASTRUS, CropType.CELASTRUS);
 			map.put(PatchType.REDWOOD, CropType.REDWOOD);
 			map.put(PatchType.HESPORI, CropType.HESPORI);
-			PlanSettings s = new PlanSettings(map, EnumSet.allOf(PatchLocation.class), 99, 1, 3, true);
+			PlanSettings s = new PlanSettings(map, EnumSet.allOf(PatchLocation.class), XpTable.xpForLevel(99), 1);
 			XpProjection p = XpProjection.toGoal(4_842_295, s);
 			List<RunTask> tasks = RunPlanner.buildTasks(s, 89, Collections.emptyMap(), 0);
-			InventoryPlanner.Plan plan = InventoryPlanner.plan(tasks, s);
 
 			Map<String, Object> r = new LinkedHashMap<>();
 			r.put("tree", combo[0].name());
@@ -108,13 +107,6 @@ public class ExportPreviewData
 			Map<String, Integer> plantings = new LinkedHashMap<>();
 			p.getPlantings().forEach((k, v) -> plantings.put(k.name(), v));
 			r.put("plantings", plantings);
-			r.put("capacity", plan.getSaplingCapacity());
-			List<String> legBanks = new ArrayList<>();
-			for (InventoryPlanner.Leg leg : plan.getLegs())
-			{
-				legBanks.add(leg.getBankAt() + " | " + leg.getSlots());
-			}
-			r.put("legs", legBanks);
 			reference.add(r);
 		}
 		out.put("reference", reference);

@@ -30,7 +30,7 @@ public class PlannerTest
 		crops.put(PatchType.CELASTRUS, CropType.CELASTRUS);
 		crops.put(PatchType.REDWOOD, CropType.REDWOOD);
 		crops.put(PatchType.HESPORI, CropType.HESPORI);
-		return new PlanSettings(crops, EnumSet.allOf(PatchLocation.class), 99, 1, 3, true);
+		return new PlanSettings(crops, EnumSet.allOf(PatchLocation.class), XpTable.xpForLevel(99), 1);
 	}
 
 	@Test
@@ -128,31 +128,6 @@ public class PlannerTest
 		assertEquals(RouteStep.FOSSIL_ISLAND, tasks.get(tasks.size() - 1).getStep());
 	}
 
-	@Test
-	public void inventoryPlanSplitsIntoLegsThatFit()
-	{
-		PlanSettings s = settings(CropType.YEW, CropType.PAPAYA);
-		List<RunTask> tasks = RunPlanner.buildTasks(s, 90, Collections.emptyMap(), NOW);
-		InventoryPlanner.Plan plan = InventoryPlanner.plan(tasks, s);
-
-		int saplingsInPlan = 0;
-		for (InventoryPlanner.Leg leg : plan.getLegs())
-		{
-			assertTrue(leg.getSlots() <= plan.getSaplingCapacity());
-			saplingsInPlan += leg.getSlots();
-		}
-		long due = tasks.stream().filter(RunTask::isDue).count();
-		assertEquals(due, saplingsInPlan);
-		assertTrue(plan.getBankStops() >= 1);
-		assertTrue(plan.getCarryItems().contains("Pendant of Ates"));
-		assertTrue(plan.getCarryItems().contains("Digsite pendant"));
-		assertEquals(70, (int) plan.getPayments().get("Cactus spine"));
-		assertEquals(70, (int) plan.getPayments().get("Pineapple"));
-		// Total slots never exceed 28.
-		int fixed = plan.getReservedSlots() + plan.getCarryItems().size() + plan.getPayments().size()
-			+ plan.getNotedProduce().size() + plan.getPickingSlots();
-		assertTrue(fixed + plan.getSaplingCapacity() <= InventoryPlanner.INVENTORY_SIZE);
-	}
 
 	@Test
 	public void supplyLinesCombineSharedPayments()
@@ -160,7 +135,7 @@ public class PlannerTest
 		Map<CropType, Integer> plantings = new EnumMap<>(CropType.class);
 		plantings.put(CropType.MAGIC, 10);
 		plantings.put(CropType.DRAGONFRUIT, 4);
-		List<SupplyCalculator.SupplyLine> lines = SupplyCalculator.compute(plantings, id -> 5);
+		List<SupplyCalculator.SupplyLine> lines = SupplyCalculator.compute(plantings, id -> 5, id -> 100);
 
 		SupplyCalculator.SupplyLine coconuts = lines.stream().filter(l -> l.getName().equals("Coconut")).findFirst().get();
 		assertEquals(10 * 25 + 4 * 15, coconuts.getNeed());
@@ -171,6 +146,21 @@ public class PlannerTest
 		// seed + 2 seedling stages + sapling, 5 of each
 		assertEquals(20, magic.getHave());
 		assertEquals(0, magic.getShort());
+		// Prices: the seed for crop rows, the item for payments.
+		assertEquals(100, magic.getPriceEach());
+		assertEquals((10 * 25 + 4 * 15 - 5) * 100L, coconuts.getShortCost());
+	}
+
+	@Test
+	public void xpGoalPastNinetyNineKeepsGoing()
+	{
+		Map<PatchType, CropType> crops = new EnumMap<>(PatchType.class);
+		crops.put(PatchType.TREE, CropType.YEW);
+		PlanSettings s = new PlanSettings(crops, EnumSet.allOf(PatchLocation.class), 50_000_000, 1);
+		XpProjection p = XpProjection.toGoal(LEVEL_89_XP, s);
+		assertTrue(p.reachesGoal());
+		// 7 yews a run: (50M - 4.84M) / 50,056 per run.
+		assertEquals((int) Math.ceil((50_000_000 - LEVEL_89_XP) / (7 * 7150.9)), p.getRuns());
 	}
 
 	private static RunTask find(List<RunTask> tasks, PatchLocation location, int index)

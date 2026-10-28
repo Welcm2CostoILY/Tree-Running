@@ -1,17 +1,24 @@
 package com.treerunning;
 
-import com.treerunning.core.InventoryPlanner;
+import com.treerunning.core.BankStop;
 import com.treerunning.core.PatchMatcher;
 import com.treerunning.core.PlanSettings;
+import com.treerunning.core.Route;
+import com.treerunning.core.RouteItem;
+import com.treerunning.core.RunNeeds;
 import com.treerunning.core.RunPlanner;
 import com.treerunning.core.RunTask;
 import com.treerunning.core.SupplyCalculator;
 import com.treerunning.core.XpProjection;
+import com.treerunning.core.XpTable;
 import com.treerunning.data.CropType;
 import com.treerunning.data.PatchLocation;
 import com.treerunning.data.PatchType;
+import com.treerunning.data.RouteStep;
 import com.google.gson.Gson;
+import com.google.gson.JsonParseException;
 import com.google.gson.JsonSyntaxException;
+import com.google.gson.reflect.TypeToken;
 import com.google.inject.Provides;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -26,6 +33,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 import javax.inject.Inject;
 import javax.swing.SwingUtilities;
 import lombok.extern.slf4j.Slf4j;
@@ -58,7 +66,7 @@ import net.runelite.client.util.ImageUtil;
 @Slf4j
 @PluginDescriptor(
 	name = "Tree Running",
-	description = "XP countdown, run checklist, supply tracker and inventory plan for daily tree runs",
+	description = "XP countdown, run checklist with bank stops, and a supply tracker with GE prices for daily tree runs",
 	tags = {"farming", "tree", "run", "99", "checklist", "hespori"}
 )
 public class TreeRunningPlugin extends Plugin
@@ -102,6 +110,8 @@ public class TreeRunningPlugin extends Plugin
 	private NavigationButton navButton;
 
 	private RunState state = new RunState();
+	/** Bank stops the player added to their route (saved in the plugin settings). */
+	private volatile List<BankStop> bankStops = Collections.emptyList();
 	/** What the last planting ticked, shown in the Run tab so you can check it. */
 	private String lastMatch;
 	private volatile PanelData data = PanelData.EMPTY;
@@ -163,7 +173,9 @@ public class TreeRunningPlugin extends Plugin
 			patchesByVarbit.computeIfAbsent(location.getVarbit(), v -> new ArrayList<>()).add(location);
 		}
 
+		loadBankStops();
 		panel = new TreeRunningPanel(this);
+		SwingUtilities.invokeLater(panel::loadSettings);
 		navButton = NavigationButton.builder()
 			.tooltip("Tree Running")
 			.icon(ImageUtil.loadImageResource(TreeRunningPlugin.class, "panel_icon.png"))
@@ -230,6 +242,10 @@ public class TreeRunningPlugin extends Plugin
 	{
 		if (TreeRunningConfig.GROUP.equals(event.getGroup()))
 		{
+			if ("bankStops".equals(event.getKey()))
+			{
+				loadBankStops();
+			}
 			clientThread.invokeLater(this::refresh);
 		}
 	}
@@ -286,6 +302,14 @@ public class TreeRunningPlugin extends Plugin
 		{
 			state.bank = countTracked(event.getItemContainer());
 			state.bankSeenAt = System.currentTimeMillis();
+			tickBankStopIfNext();
+			saveState();
+			refresh();
+		}
+		else if (containerId == InventoryID.SEED_VAULT)
+		{
+			state.vault = countTracked(event.getItemContainer());
+			state.vaultSeenAt = System.currentTimeMillis();
 			saveState();
 			refresh();
 		}
@@ -393,6 +417,21 @@ public class TreeRunningPlugin extends Plugin
 		finishIfComplete(tasks);
 	}
 
+	/** Opening your bank during a run ticks the bank stop, if a bank stop is what's next. */
+	private void tickBankStopIfNext()
+	{
+		if (!state.active)
+		{
+			return;
+		}
+		List<RouteItem> items = Route.build(currentTasks(buildSettings()), bankStops);
+		RouteItem next = Route.next(items, state.done);
+		if (next != null && next.isBank())
+		{
+			state.done.add(next.getKey());
+		}
+	}
+
 	private void markDone(RunTask task)
 	{
 		state.done.add(task.getKey());
@@ -455,6 +494,13 @@ public class TreeRunningPlugin extends Plugin
 			{
 				beginRun(client.getSkillExperience(Skill.FARMING));
 			}
+			if (key.startsWith("bank:"))
+			{
+				state.done.add(key);
+				saveState();
+				refresh();
+				return;
+			}
 			for (RunTask task : tasks)
 			{
 				if (task.getKey().equals(key))
@@ -499,6 +545,76 @@ public class TreeRunningPlugin extends Plugin
 		});
 	}
 
+	/** Saves one setting from the XP tab. ConfigManager is thread-safe. */
+	void setSetting(String key, Object value)
+	{
+		configManager.setConfiguration(TreeRunningConfig.GROUP, key, value);
+	}
+
+	boolean isPatchEnabled(PatchLocation location)
+	{
+		String key = TreeRunningConfig.PATCH_KEYS.get(location);
+		String value = key == null ? null : configManager.getConfiguration(TreeRunningConfig.GROUP, key);
+		return value == null || Boolean.parseBoolean(value);
+	}
+
+	void setPatchEnabled(PatchLocation location, boolean enabled)
+	{
+		String key = TreeRunningConfig.PATCH_KEYS.get(location);
+		if (key != null)
+		{
+			setSetting(key, enabled);
+		}
+	}
+
+	/** A copy of the bank stops, for the route editor. */
+	List<BankStop> getBankStops()
+	{
+		List<BankStop> copy = new ArrayList<>();
+		for (BankStop b : bankStops)
+		{
+			copy.add(new BankStop(b.id, b.getRouteStep(), b.before, b.name));
+		}
+		return copy;
+	}
+
+	void saveBankStops(List<BankStop> stops)
+	{
+		bankStops = Collections.unmodifiableList(new ArrayList<>(stops));
+		setSetting("bankStops", gson.toJson(stops));
+	}
+
+	static BankStop newBankStop(RouteStep step)
+	{
+		return new BankStop(UUID.randomUUID().toString().substring(0, 8), step, true, "");
+	}
+
+	private void loadBankStops()
+	{
+		List<BankStop> loaded = new ArrayList<>();
+		try
+		{
+			List<BankStop> parsed = gson.fromJson(config.bankStops(), new TypeToken<List<BankStop>>()
+			{
+			}.getType());
+			if (parsed != null)
+			{
+				for (BankStop b : parsed)
+				{
+					if (b != null && b.id != null && b.getRouteStep() != null)
+					{
+						loaded.add(b);
+					}
+				}
+			}
+		}
+		catch (JsonParseException e)
+		{
+			log.warn("Couldn't read saved bank stops", e);
+		}
+		bankStops = Collections.unmodifiableList(loaded);
+	}
+
 	// ------------------------------------------------------------------ planning
 
 	private PlanSettings buildSettings()
@@ -522,41 +638,15 @@ public class TreeRunningPlugin extends Plugin
 			}
 		}
 
-		return new PlanSettings(crops, enabled, config.goalLevel(), config.runsPerDay(), config.reservedSlots(),
-			config.pickProduce());
+		return new PlanSettings(crops, enabled, goalXp(), config.runsPerDay());
 	}
 
-	private boolean isPatchEnabled(PatchLocation location)
+	/** The goal as an XP total, whichever way it was set. */
+	private int goalXp()
 	{
-		switch (location)
-		{
-			case TREE_FARMING_GUILD: return config.treeFarmingGuild();
-			case TREE_GNOME_STRONGHOLD: return config.treeGnomeStronghold();
-			case TREE_FALADOR: return config.treeFalador();
-			case TREE_TAVERLEY: return config.treeTaverley();
-			case TREE_VARROCK: return config.treeVarrock();
-			case TREE_LUMBRIDGE: return config.treeLumbridge();
-			case TREE_NEMUS_RETREAT: return config.treeNemusRetreat();
-			case FRUIT_FARMING_GUILD: return config.fruitFarmingGuild();
-			case FRUIT_GNOME_STRONGHOLD: return config.fruitGnomeStronghold();
-			case FRUIT_TREE_GNOME_VILLAGE: return config.fruitTreeGnomeVillage();
-			case FRUIT_CATHERBY: return config.fruitCatherby();
-			case FRUIT_BRIMHAVEN: return config.fruitBrimhaven();
-			case FRUIT_KASTORI: return config.fruitKastori();
-			case FRUIT_LLETYA: return config.fruitLletya();
-			case CALQUAT_TAI_BWO_WANNAI: return config.calquatTaiBwoWannai();
-			case CALQUAT_KASTORI: return config.calquatKastori();
-			case CALQUAT_SUMMER_SHORE: return config.calquatSummerShore();
-			case CELASTRUS_FARMING_GUILD: return config.celastrusFarmingGuild();
-			case REDWOOD_FARMING_GUILD: return config.redwoodFarmingGuild();
-			case HESPORI_FARMING_GUILD: return config.hesporiFarmingGuild();
-			case HARDWOOD_LOCUS_OASIS: return config.hardwoodLocusOasis();
-			case HARDWOOD_ANGLERS_RETREAT: return config.hardwoodAnglersRetreat();
-			case HARDWOOD_FOSSIL_ISLAND_EAST: return config.hardwoodFossilEast();
-			case HARDWOOD_FOSSIL_ISLAND_MIDDLE: return config.hardwoodFossilMiddle();
-			case HARDWOOD_FOSSIL_ISLAND_WEST: return config.hardwoodFossilWest();
-			default: return true;
-		}
+		return config.goalType() == TreeRunningConfig.GoalType.XP
+			? Math.max(1, Math.min(200_000_000, config.goalXp()))
+			: XpTable.xpForLevel(Math.max(2, Math.min(99, config.goalLevel())));
 	}
 
 	private List<RunTask> currentTasks(PlanSettings settings)
@@ -594,17 +684,40 @@ public class TreeRunningPlugin extends Plugin
 			? XpProjection.forRuns(xp, runsLeft, settings).getPlantings()
 			: Collections.emptyMap();
 		Map<Integer, Integer> bank = state.bank;
+		Map<Integer, Integer> vault = state.vault;
 		Map<Integer, Integer> inv = inventory;
 		List<SupplyCalculator.SupplyLine> supplies = SupplyCalculator.compute(plantings,
-			id -> bank.getOrDefault(id, 0) + inv.getOrDefault(id, 0));
+			id -> bank.getOrDefault(id, 0) + vault.getOrDefault(id, 0) + inv.getOrDefault(id, 0),
+			// The OSRS Wiki's live price, which RuneLite downloads and keeps up to date.
+			id -> itemManager.getItemPriceWithSource(id, true));
 
 		List<RunTask> tasks = currentTasks(settings);
-		InventoryPlanner.Plan plan = InventoryPlanner.plan(tasks, settings);
 
-		publish(new PanelData(true, xp, level, settings.getGoalLevel(), goalXp, planned.getAverageXpPerRun(),
-			planned.reachesGoal() ? planned.getRuns() : -1, actual, counted, runsLeft, fromActual, settings.getRunsPerDay(),
-			tasks, new HashSet<>(state.done), state.active, state.active ? Math.max(0, xp - state.startXp) : 0,
-			supplies, state.bankSeenAt, plan, lastMatch));
+		PanelData d = new PanelData();
+		d.loggedIn = true;
+		d.currentXp = xp;
+		d.level = level;
+		d.goalType = config.goalType();
+		d.goalLevel = config.goalLevel();
+		d.goalXp = goalXp;
+		d.plannedXpPerRun = planned.getAverageXpPerRun();
+		d.plannedRuns = planned.reachesGoal() ? planned.getRuns() : -1;
+		d.actualXpPerRun = actual;
+		d.actualRunsCounted = counted;
+		d.runsLeft = runsLeft;
+		d.runsLeftFromActual = fromActual;
+		d.runsPerDay = settings.getRunsPerDay();
+		d.tasks = tasks;
+		d.items = Route.build(tasks, bankStops);
+		d.done = new HashSet<>(state.done);
+		d.runActive = state.active;
+		d.runXpSoFar = state.active ? Math.max(0, xp - state.startXp) : 0;
+		d.lastMatch = lastMatch;
+		d.needs = RunNeeds.compute(tasks);
+		d.supplies = supplies;
+		d.bankSeenAt = state.bankSeenAt;
+		d.vaultSeenAt = state.vaultSeenAt;
+		publish(d);
 	}
 
 	private void publish(PanelData snapshot)

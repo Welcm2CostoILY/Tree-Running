@@ -130,12 +130,53 @@ body {
 .group:first-child { margin-top: 0; }
 .legend { max-width: 1240px; margin: 14px auto 0; color: var(--muted); font-size: 0.875rem; line-height: 1.5; display: flex; flex-wrap: wrap; gap: 6px 24px; }
 .legend b { color: var(--text); font-weight: 700; }
+
+/* v8: two-column client, settings live in the XP tab */
+:root { --bank: #7cc4ff; }
+.client { grid-template-columns: minmax(0, 1fr) 300px; }
+@media (max-width: 960px) { .client { grid-template-columns: minmax(0, 1fr) 300px; } }
+@media (max-width: 680px) { .client { grid-template-columns: minmax(0, 1fr); } .side { border-left: 0; border-top: 1px solid var(--line); } }
+.tabs { grid-template-columns: repeat(3, 1fr); }
+.tab-body[hidden] { display: none !important; }
+.cfg { padding: 0; max-height: none; overflow: visible; }
+.settings-head { color: var(--white); font-weight: 600; font-size: 14px; border-top: 1px solid var(--line); padding-top: 10px; margin-top: 10px; }
+.rs { display: flex; flex-direction: column; gap: 4px; padding-top: 6px; }
+.rs-head { color: var(--orange); font-weight: 600; margin-top: 4px; }
+.rs .field { padding-left: 8px; }
+.linkbtn { align-self: flex-start; background: none; border: 1px dashed var(--line); color: var(--muted); font: 12px var(--font-pixel); padding: 3px 8px; cursor: pointer; margin-top: 2px; }
+.linkbtn:hover { color: var(--white); border-color: var(--muted); }
+.bankedit { display: flex; flex-direction: column; gap: 4px; padding: 4px 6px; border: 1px solid var(--line); background: var(--panel-2); }
+.bankline1 { display: flex; gap: 4px; align-items: center; }
+.bankedit select { font: 12px var(--font-pixel); background: var(--panel); color: var(--text); border: 1px solid var(--line); padding: 2px 4px; }
+.bankline1 span { color: var(--bank); font-weight: 600; flex: none; }
+.bankedit input { flex: 1; min-width: 0; font: 12.5px var(--font-pixel); background: var(--panel); color: var(--white); border: 1px solid var(--line); padding: 3px 4px; }
+.bankedit button { flex: none; background: none; border: 0; color: var(--muted); cursor: pointer; font: 14px var(--font-pixel); padding: 0 4px; }
+.bankedit button:hover { color: var(--bad); }
+.check.bankstop { color: var(--bank); }
+.grid4 { display: grid; grid-template-columns: minmax(0, 1fr) 42px 44px 46px; gap: 2px 6px; font-variant-numeric: tabular-nums; }
+.grid4 .n { text-align: right; }
+.grid4 .hd { color: var(--text); }
+.grid4 .price { text-align: right; color: var(--muted); }
+.osrs-overlay .bankstop { color: var(--bank); }
+.needs { border: 1px solid var(--line); background: var(--panel-2); padding: 6px 8px; display: flex; flex-direction: column; gap: 3px; margin: 2px 0; }
+.needs-title { display: flex; justify-content: space-between; color: var(--white); font-weight: 600; }
+.needs-title .muted { font-weight: 400; }
+.needs-grid { display: grid; grid-template-columns: 18px minmax(0, 0.9fr) 30px minmax(0, 1.1fr); gap: 1px 6px; font-variant-numeric: tabular-nums; line-height: 1.35; }
+.needs-grid .n { text-align: right; color: var(--white); }
+/* Patch type colors: tree, fruit tree, hardwood, calquat, celastrus, redwood, Hespori */
+.t-TREE { color: #7fd35c; }
+.t-FRUIT_TREE { color: #ff9e7a; }
+.t-HARDWOOD { color: #d2a679; }
+.t-CALQUAT { color: #f0d264; }
+.t-CELASTRUS { color: #c3a6f2; }
+.t-REDWOOD { color: #ef7d6b; }
+.t-HESPORI { color: #6fd8c6; }
 </style>
 
 <header class="intro">
   <h1>Tree Running</h1>
   <span class="tag">Preview · sample data</span>
-  <p>A working preview of the RuneLite plugin. It starts from a sample account at 89 Farming with a small sample bank. Change crops in Settings, tick patches in the Run tab, or use the buttons in the game view to plant patches and move to the next day.</p>
+  <p>A working preview of the RuneLite plugin, starting from a sample account at 89 Farming with a sample bank and seed vault. Change crops and add bank stops under Settings in the XP tab, tick patches in the Run tab, or use the buttons in the game view to step through a run.</p>
 </header>
 
 <main class="client">
@@ -144,7 +185,7 @@ body {
     <div class="osrs-overlay" id="overlay" aria-live="polite"></div>
     <div class="toast" id="toast" aria-hidden="true"></div>
     <div class="game-controls">
-      <button class="sim-btn" id="plantBtn" type="button">Simulate planting</button>
+      <button class="sim-btn" id="plantBtn" type="button">Simulate next step</button>
       <button class="sim-btn secondary" id="dayBtn" type="button">Next day</button>
       <span class="clock" id="clock"></span>
     </div>
@@ -156,47 +197,49 @@ body {
       Tree Running
     </div>
     <div class="tabs" role="tablist">
-      <button role="tab" id="tab-xp" aria-selected="true" aria-controls="body" data-tab="xp">XP</button>
-      <button role="tab" id="tab-run" aria-selected="false" aria-controls="body" data-tab="run">Run</button>
-      <button role="tab" id="tab-sup" aria-selected="false" aria-controls="body" data-tab="sup">Supplies</button>
-      <button role="tab" id="tab-inv" aria-selected="false" aria-controls="body" data-tab="inv">Inventory</button>
+      <button role="tab" id="tab-xp" aria-selected="true" aria-controls="body-xp" data-tab="xp">XP</button>
+      <button role="tab" id="tab-run" aria-selected="false" aria-controls="body-run" data-tab="run">Run</button>
+      <button role="tab" id="tab-sup" aria-selected="false" aria-controls="body-sup" data-tab="sup">Supplies</button>
     </div>
-    <div class="tab-body" id="body" role="tabpanel"></div>
-  </section>
-
-  <section class="settings" aria-label="Plugin settings">
-    <div class="panel-head">Settings</div>
-    <form class="cfg" id="cfg" onsubmit="return false">
-      <details open><summary>Crops</summary><div class="fields">
-        <label class="field">Tree patches <select id="treeCrop"></select></label>
-        <label class="field">Fruit tree patches <select id="fruitCrop"></select></label>
-        <label class="field">Hardwood patches <select id="hardwoodCrop"></select></label>
-      </div></details>
-      <details open><summary>Goal</summary><div class="fields">
-        <label class="field">Goal level <input type="number" id="goalLevel" min="90" max="99" value="99"></label>
-        <label class="field">Runs per day <input type="number" id="runsPerDay" min="1" max="4" value="1"></label>
-      </div></details>
-      <details><summary>Inventory</summary><div class="fields">
-        <label class="field">Always-carried slots <input type="number" id="reservedSlots" min="0" max="20" value="3"></label>
-        <label class="field">Pick fruit <input type="checkbox" id="pickProduce" checked></label>
-      </div></details>
-      <details><summary>Overlay</summary><div class="fields">
-        <label class="field">Show checklist overlay <input type="checkbox" id="showOverlay" checked></label>
-        <label class="field">Only during a run <input type="checkbox" id="overlayOnlyDuringRun"></label>
-      </div></details>
-      <details open><summary>Patches</summary><div class="fields" id="patchFields"></div></details>
-    </form>
+    <div class="tab-body" id="body-xp" role="tabpanel" aria-labelledby="tab-xp">
+      <div id="xpStats" class="rs"></div>
+      <div class="settings-head">Settings</div>
+      <form class="cfg" id="cfg" onsubmit="return false">
+        <details open><summary>Crops</summary><div class="fields">
+          <label class="field">Tree patches <select id="treeCrop"></select></label>
+          <label class="field">Fruit tree patches <select id="fruitCrop"></select></label>
+          <label class="field">Hardwood patches <select id="hardwoodCrop"></select></label>
+        </div></details>
+        <details open><summary>Goal</summary><div class="fields">
+          <label class="field">Goal type <select id="goalType"><option value="level" selected>Level</option><option value="xp">XP</option></select></label>
+          <label class="field" id="goalLevelRow">Goal level <input type="number" id="goalLevel" min="2" max="99" value="99"></label>
+          <label class="field" id="goalXpRow" hidden>Goal XP <input type="text" id="goalXp" inputmode="numeric" value="13,034,431" aria-describedby="goalXpHint"></label>
+          <div class="muted" id="goalXpHint" hidden>Any amount up to 200,000,000. 99 is 13,034,431.</div>
+          <label class="field">Runs per day <input type="number" id="runsPerDay" min="1" max="4" value="1"></label>
+        </div></details>
+        <details><summary>Overlay</summary><div class="fields">
+          <label class="field">Show checklist overlay <input type="checkbox" id="showOverlay" checked></label>
+          <label class="field">Only during a run <input type="checkbox" id="overlayOnlyDuringRun"></label>
+        </div></details>
+        <details open><summary>Route &amp; patches</summary><div class="fields">
+          <div class="muted">Untick patches you don't use. Add a bank stop between stops and type where you bank.</div>
+          <div id="routeFields"></div>
+        </div></details>
+      </form>
+    </div>
+    <div class="tab-body" id="body-run" role="tabpanel" aria-labelledby="tab-run" hidden></div>
+    <div class="tab-body" id="body-sup" role="tabpanel" aria-labelledby="tab-sup" hidden></div>
   </section>
 </main>
 
 <div class="legend">
-  <span><b>Simulate planting</b> stands in for playing. In game the plugin ticks the exact patch you plant, in any order, with no clicking.</span>
+  <span><b>Simulate next step</b> stands in for playing. In game the plugin ticks the exact patch you plant, and ticks a bank stop when you open your bank.</span>
   <span><b>Next day</b> moves the clock 24 hours, so hardwood, redwood and Hespori come back when they've grown.</span>
-  <span>Numbers use the same data and math as the plugin.</span>
+  <span>Prices here are sample OSRS Wiki prices. The plugin shows the live Wiki price.</span>
 </div>
 
 <script>
-const DATA = {"crops":[{"key":"OAK","name":"Oak","type":"TREE","level":15,"xp":481.3,"growth":200,"planted":"Oak sapling","payment":"Tomatoes(5)","paymentQty":1,"produce":null,"seedOnly":false},{"key":"WILLOW","name":"Willow","type":"TREE","level":30,"xp":1481.5,"growth":280,"planted":"Willow sapling","payment":"Apples(5)","paymentQty":1,"produce":null,"seedOnly":false},{"key":"MAPLE","name":"Maple","type":"TREE","level":45,"xp":3448.4,"growth":320,"planted":"Maple sapling","payment":"Oranges(5)","paymentQty":1,"produce":null,"seedOnly":false},{"key":"YEW","name":"Yew","type":"TREE","level":60,"xp":7150.9,"growth":400,"planted":"Yew sapling","payment":"Cactus spine","paymentQty":10,"produce":null,"seedOnly":false},{"key":"MAGIC","name":"Magic","type":"TREE","level":75,"xp":13913.8,"growth":480,"planted":"Magic sapling","payment":"Coconut","paymentQty":25,"produce":null,"seedOnly":false},{"key":"APPLE","name":"Apple","type":"FRUIT_TREE","level":27,"xp":1272.5,"growth":960,"planted":"Apple sapling","payment":"Sweetcorn","paymentQty":9,"produce":"Cooking apple","seedOnly":false},{"key":"BANANA","name":"Banana","type":"FRUIT_TREE","level":33,"xp":1841.5,"growth":960,"planted":"Banana sapling","payment":"Apples(5)","paymentQty":4,"produce":"Banana","seedOnly":false},{"key":"ORANGE","name":"Orange","type":"FRUIT_TREE","level":39,"xp":2586.7,"growth":960,"planted":"Orange sapling","payment":"Strawberries(5)","paymentQty":3,"produce":"Orange","seedOnly":false},{"key":"CURRY","name":"Curry","type":"FRUIT_TREE","level":42,"xp":3036.9,"growth":960,"planted":"Curry sapling","payment":"Bananas(5)","paymentQty":5,"produce":"Curry leaf","seedOnly":false},{"key":"PINEAPPLE","name":"Pineapple","type":"FRUIT_TREE","level":51,"xp":4791.7,"growth":960,"planted":"Pineapple sapling","payment":"Watermelon","paymentQty":10,"produce":"Pineapple","seedOnly":false},{"key":"PAPAYA","name":"Papaya","type":"FRUIT_TREE","level":57,"xp":6453.9,"growth":960,"planted":"Papaya sapling","payment":"Pineapple","paymentQty":10,"produce":"Papaya fruit","seedOnly":false},{"key":"PALM","name":"Palm","type":"FRUIT_TREE","level":68,"xp":10509.6,"growth":960,"planted":"Palm sapling","payment":"Papaya fruit","paymentQty":15,"produce":"Coconut","seedOnly":false},{"key":"DRAGONFRUIT","name":"Dragonfruit","type":"FRUIT_TREE","level":81,"xp":17895.0,"growth":960,"planted":"Dragonfruit sapling","payment":"Coconut","paymentQty":15,"produce":"Dragonfruit","seedOnly":false},{"key":"TEAK","name":"Teak","type":"HARDWOOD","level":35,"xp":7325.0,"growth":4480,"planted":"Teak sapling","payment":"Limpwurt root","paymentQty":15,"produce":null,"seedOnly":false},{"key":"MAHOGANY","name":"Mahogany","type":"HARDWOOD","level":55,"xp":15783.0,"growth":5120,"planted":"Mahogany sapling","payment":"Yanillian hops","paymentQty":25,"produce":null,"seedOnly":false},{"key":"CAMPHOR","name":"Camphor","type":"HARDWOOD","level":66,"xp":17928.0,"growth":5120,"planted":"Camphor sapling","payment":"White berries","paymentQty":10,"produce":null,"seedOnly":false},{"key":"IRONWOOD","name":"Ironwood","type":"HARDWOOD","level":80,"xp":20525.0,"growth":5120,"planted":"Ironwood sapling","payment":"Curry leaf","paymentQty":10,"produce":null,"seedOnly":false},{"key":"ROSEWOOD","name":"Rosewood","type":"HARDWOOD","level":92,"xp":23352.0,"growth":6400,"planted":"Rosewood sapling","payment":"Dragonfruit","paymentQty":8,"produce":null,"seedOnly":false},{"key":"CALQUAT","name":"Calquat","type":"CALQUAT","level":72,"xp":12516.5,"growth":1280,"planted":"Calquat sapling","payment":"Poison ivy berries","paymentQty":8,"produce":"Calquat fruit","seedOnly":false},{"key":"CELASTRUS","name":"Celastrus","type":"CELASTRUS","level":85,"xp":14400.5,"growth":800,"planted":"Celastrus sapling","payment":"Potato cactus","paymentQty":8,"produce":"Celastrus bark","seedOnly":false},{"key":"REDWOOD","name":"Redwood","type":"REDWOOD","level":90,"xp":22680.0,"growth":6400,"planted":"Redwood sapling","payment":"Dragonfruit","paymentQty":6,"produce":null,"seedOnly":false},{"key":"HESPORI","name":"Hespori","type":"HESPORI","level":65,"xp":12662.0,"growth":1920,"planted":"Hespori seed","payment":null,"paymentQty":0,"produce":null,"seedOnly":true}],"steps":[{"key":"FARMING_GUILD","name":"Farming Guild","travel":"Jewellery box: Skills necklace → Farming Guild (or house spirit tree)","bank":"Farming Guild bank (inside the guild)","carry":null},{"key":"GNOME_STRONGHOLD","name":"Gnome Stronghold","travel":"House spirit tree → Gnome Stronghold","bank":"Grand Tree bank","carry":null},{"key":"TREE_GNOME_VILLAGE","name":"Tree Gnome Village","travel":"Spirit tree → Tree Gnome Village, squeeze through the railing, follow Elkoy, run south-west","bank":null,"carry":null},{"key":"CATHERBY","name":"Catherby","travel":"Portal nexus → Camelot, run to the Catherby beach patch","bank":"Catherby bank","carry":null},{"key":"BRIMHAVEN","name":"Brimhaven","travel":"House spirit tree → Brimhaven, run west","bank":null,"carry":null},{"key":"TAI_BWO_WANNAI","name":"Tai Bwo Wannai","travel":"Run south from Brimhaven to the calquat patch","bank":null,"carry":null},{"key":"FALADOR","name":"Falador Park","travel":"Jewellery box: Ring of wealth → Falador Park","bank":"Falador West bank","carry":null},{"key":"TAVERLEY","name":"Taverley","travel":"Falador wall shortcut west (66 Agility)","bank":null,"carry":null},{"key":"VARROCK","name":"Varrock Castle","travel":"Portal nexus → Varrock","bank":"Varrock West bank","carry":null},{"key":"LUMBRIDGE","name":"Lumbridge","travel":"Portal nexus → Lumbridge, run west of the castle","bank":"Lumbridge Castle bank (top floor)","carry":null},{"key":"NEMUS_RETREAT","name":"Nemus Retreat","travel":"Pendant of Ates → Nemus Retreat, run north (or quetzal to Auburnvale)","bank":null,"carry":"Pendant of Ates"},{"key":"KASTORI","name":"Kastori","travel":"Quetzal or Pendant of Ates → Kastori (fruit tree, then calquat)","bank":null,"carry":"Pendant of Ates"},{"key":"LOCUS_OASIS","name":"Locus Oasis","travel":"Fairy ring AJP, run south-east","bank":null,"carry":null},{"key":"LLETYA","name":"Lletya","travel":"Teleport crystal → Lletya, run south-east","bank":"Lletya bank","carry":"Teleport crystal"},{"key":"SUMMER_SHORE","name":"The Summer Shore","travel":"Fairy ring CJQ, run south then west","bank":null,"carry":null},{"key":"ANGLERS_RETREAT","name":"Anglers' Retreat","travel":"Sail or take the rowboat from Corsair Cove (51 Sailing)","bank":null,"carry":null},{"key":"FOSSIL_ISLAND","name":"Fossil Island","travel":"Digsite pendant → Fossil Island, walk to the Mushroom Forest","bank":null,"carry":"Digsite pendant"}],"fallbackBank":"Teleport to house → jewellery box: Ring of dueling → Castle Wars bank","locations":[{"key":"TREE_FARMING_GUILD","type":"TREE","step":"FARMING_GUILD","count":1,"patchName":null,"req":"65 Farming"},{"key":"TREE_GNOME_STRONGHOLD","type":"TREE","step":"GNOME_STRONGHOLD","count":1,"patchName":null,"req":null},{"key":"TREE_FALADOR","type":"TREE","step":"FALADOR","count":1,"patchName":null,"req":null},{"key":"TREE_TAVERLEY","type":"TREE","step":"TAVERLEY","count":1,"patchName":null,"req":"66 Agility for the Falador wall shortcut"},{"key":"TREE_VARROCK","type":"TREE","step":"VARROCK","count":1,"patchName":null,"req":null},{"key":"TREE_LUMBRIDGE","type":"TREE","step":"LUMBRIDGE","count":1,"patchName":null,"req":null},{"key":"TREE_NEMUS_RETREAT","type":"TREE","step":"NEMUS_RETREAT","count":1,"patchName":null,"req":"Children of the Sun"},{"key":"FRUIT_FARMING_GUILD","type":"FRUIT_TREE","step":"FARMING_GUILD","count":1,"patchName":null,"req":"85 Farming"},{"key":"FRUIT_GNOME_STRONGHOLD","type":"FRUIT_TREE","step":"GNOME_STRONGHOLD","count":1,"patchName":null,"req":null},{"key":"FRUIT_TREE_GNOME_VILLAGE","type":"FRUIT_TREE","step":"TREE_GNOME_VILLAGE","count":1,"patchName":null,"req":"Tree Gnome Village (for the spirit tree)"},{"key":"FRUIT_CATHERBY","type":"FRUIT_TREE","step":"CATHERBY","count":1,"patchName":null,"req":null},{"key":"FRUIT_BRIMHAVEN","type":"FRUIT_TREE","step":"BRIMHAVEN","count":1,"patchName":null,"req":null},{"key":"FRUIT_KASTORI","type":"FRUIT_TREE","step":"KASTORI","count":1,"patchName":null,"req":"Children of the Sun"},{"key":"FRUIT_LLETYA","type":"FRUIT_TREE","step":"LLETYA","count":1,"patchName":null,"req":"Mourning's End Part I (partial)"},{"key":"CALQUAT_TAI_BWO_WANNAI","type":"CALQUAT","step":"TAI_BWO_WANNAI","count":1,"patchName":null,"req":null},{"key":"CALQUAT_KASTORI","type":"CALQUAT","step":"KASTORI","count":1,"patchName":null,"req":"Children of the Sun"},{"key":"CALQUAT_SUMMER_SHORE","type":"CALQUAT","step":"SUMMER_SHORE","count":1,"patchName":null,"req":"Troubled Tortugans (partial); 50 Agility via fairy ring"},{"key":"CELASTRUS_FARMING_GUILD","type":"CELASTRUS","step":"FARMING_GUILD","count":1,"patchName":null,"req":"85 Farming"},{"key":"REDWOOD_FARMING_GUILD","type":"REDWOOD","step":"FARMING_GUILD","count":1,"patchName":null,"req":"90 Farming"},{"key":"HESPORI_FARMING_GUILD","type":"HESPORI","step":"FARMING_GUILD","count":1,"patchName":null,"req":"65 Farming"},{"key":"HARDWOOD_LOCUS_OASIS","type":"HARDWOOD","step":"LOCUS_OASIS","count":1,"patchName":null,"req":"The Ribbiting Tale of a Lily Pad Labour Dispute"},{"key":"HARDWOOD_ANGLERS_RETREAT","type":"HARDWOOD","step":"ANGLERS_RETREAT","count":1,"patchName":null,"req":"51 Sailing (rowboat route: build it with 50 Construction)"},{"key":"HARDWOOD_FOSSIL_ISLAND_EAST","type":"HARDWOOD","step":"FOSSIL_ISLAND","count":1,"patchName":"East","req":"Bone Voyage"},{"key":"HARDWOOD_FOSSIL_ISLAND_MIDDLE","type":"HARDWOOD","step":"FOSSIL_ISLAND","count":1,"patchName":"Middle","req":"Bone Voyage"},{"key":"HARDWOOD_FOSSIL_ISLAND_WEST","type":"HARDWOOD","step":"FOSSIL_ISLAND","count":1,"patchName":"West","req":"Bone Voyage"}]};
+const DATA = {"crops":[{"key":"OAK","name":"Oak","type":"TREE","level":15,"xp":481.3,"growth":200,"planted":"Oak sapling","payment":"Tomatoes(5)","paymentQty":1,"produce":null,"seedOnly":false},{"key":"WILLOW","name":"Willow","type":"TREE","level":30,"xp":1481.5,"growth":280,"planted":"Willow sapling","payment":"Apples(5)","paymentQty":1,"produce":null,"seedOnly":false},{"key":"MAPLE","name":"Maple","type":"TREE","level":45,"xp":3448.4,"growth":320,"planted":"Maple sapling","payment":"Oranges(5)","paymentQty":1,"produce":null,"seedOnly":false},{"key":"YEW","name":"Yew","type":"TREE","level":60,"xp":7150.9,"growth":400,"planted":"Yew sapling","payment":"Cactus spine","paymentQty":10,"produce":null,"seedOnly":false},{"key":"MAGIC","name":"Magic","type":"TREE","level":75,"xp":13913.8,"growth":480,"planted":"Magic sapling","payment":"Coconut","paymentQty":25,"produce":null,"seedOnly":false},{"key":"APPLE","name":"Apple","type":"FRUIT_TREE","level":27,"xp":1272.5,"growth":960,"planted":"Apple sapling","payment":"Sweetcorn","paymentQty":9,"produce":"Cooking apple","seedOnly":false},{"key":"BANANA","name":"Banana","type":"FRUIT_TREE","level":33,"xp":1841.5,"growth":960,"planted":"Banana sapling","payment":"Apples(5)","paymentQty":4,"produce":"Banana","seedOnly":false},{"key":"ORANGE","name":"Orange","type":"FRUIT_TREE","level":39,"xp":2586.7,"growth":960,"planted":"Orange sapling","payment":"Strawberries(5)","paymentQty":3,"produce":"Orange","seedOnly":false},{"key":"CURRY","name":"Curry","type":"FRUIT_TREE","level":42,"xp":3036.9,"growth":960,"planted":"Curry sapling","payment":"Bananas(5)","paymentQty":5,"produce":"Curry leaf","seedOnly":false},{"key":"PINEAPPLE","name":"Pineapple","type":"FRUIT_TREE","level":51,"xp":4791.7,"growth":960,"planted":"Pineapple sapling","payment":"Watermelon","paymentQty":10,"produce":"Pineapple","seedOnly":false},{"key":"PAPAYA","name":"Papaya","type":"FRUIT_TREE","level":57,"xp":6453.9,"growth":960,"planted":"Papaya sapling","payment":"Pineapple","paymentQty":10,"produce":"Papaya fruit","seedOnly":false},{"key":"PALM","name":"Palm","type":"FRUIT_TREE","level":68,"xp":10509.6,"growth":960,"planted":"Palm sapling","payment":"Papaya fruit","paymentQty":15,"produce":"Coconut","seedOnly":false},{"key":"DRAGONFRUIT","name":"Dragonfruit","type":"FRUIT_TREE","level":81,"xp":17895.0,"growth":960,"planted":"Dragonfruit sapling","payment":"Coconut","paymentQty":15,"produce":"Dragonfruit","seedOnly":false},{"key":"TEAK","name":"Teak","type":"HARDWOOD","level":35,"xp":7325.0,"growth":4480,"planted":"Teak sapling","payment":"Limpwurt root","paymentQty":15,"produce":null,"seedOnly":false},{"key":"MAHOGANY","name":"Mahogany","type":"HARDWOOD","level":55,"xp":15783.0,"growth":5120,"planted":"Mahogany sapling","payment":"Yanillian hops","paymentQty":25,"produce":null,"seedOnly":false},{"key":"CAMPHOR","name":"Camphor","type":"HARDWOOD","level":66,"xp":17928.0,"growth":5120,"planted":"Camphor sapling","payment":"White berries","paymentQty":10,"produce":null,"seedOnly":false},{"key":"IRONWOOD","name":"Ironwood","type":"HARDWOOD","level":80,"xp":20525.0,"growth":5120,"planted":"Ironwood sapling","payment":"Curry leaf","paymentQty":10,"produce":null,"seedOnly":false},{"key":"ROSEWOOD","name":"Rosewood","type":"HARDWOOD","level":92,"xp":23352.0,"growth":6400,"planted":"Rosewood sapling","payment":"Dragonfruit","paymentQty":8,"produce":null,"seedOnly":false},{"key":"CALQUAT","name":"Calquat","type":"CALQUAT","level":72,"xp":12516.5,"growth":1280,"planted":"Calquat sapling","payment":"Poison ivy berries","paymentQty":8,"produce":"Calquat fruit","seedOnly":false},{"key":"CELASTRUS","name":"Celastrus","type":"CELASTRUS","level":85,"xp":14400.5,"growth":800,"planted":"Celastrus sapling","payment":"Potato cactus","paymentQty":8,"produce":"Celastrus bark","seedOnly":false},{"key":"REDWOOD","name":"Redwood","type":"REDWOOD","level":90,"xp":22680.0,"growth":6400,"planted":"Redwood sapling","payment":"Dragonfruit","paymentQty":6,"produce":null,"seedOnly":false},{"key":"HESPORI","name":"Hespori","type":"HESPORI","level":65,"xp":12662.0,"growth":1920,"planted":"Hespori seed","payment":null,"paymentQty":0,"produce":null,"seedOnly":true}],"steps":[{"key":"FARMING_GUILD","name":"Farming Guild","travel":"Jewellery box → Farming Guild","bank":"Farming Guild bank (inside the guild)","carry":null},{"key":"GNOME_STRONGHOLD","name":"Gnome Stronghold","travel":"Spirit tree → Gnome Stronghold","bank":"Grand Tree bank","carry":null},{"key":"TREE_GNOME_VILLAGE","name":"Tree Gnome Village","travel":"Spirit tree → Tree Gnome Village, follow Elkoy, run south-west","bank":null,"carry":null},{"key":"CATHERBY","name":"Catherby","travel":"Portal nexus → Catherby, run to beach","bank":"Catherby bank","carry":null},{"key":"BRIMHAVEN","name":"Brimhaven","travel":"Spirit tree → Brimhaven, run west","bank":null,"carry":null},{"key":"TAI_BWO_WANNAI","name":"Tai Bwo Wannai","travel":"Run south from Brimhaven to the calquat patch","bank":null,"carry":null},{"key":"FALADOR","name":"Falador Park","travel":"Jewellery box → Falador Park","bank":"Falador West bank","carry":null},{"key":"TAVERLEY","name":"Taverley","travel":"Run to Taverley","bank":null,"carry":null},{"key":"VARROCK","name":"Varrock Castle","travel":"Portal nexus → Varrock","bank":"Varrock West bank","carry":null},{"key":"LUMBRIDGE","name":"Lumbridge","travel":"Portal nexus → Lumbridge, run west of the castle","bank":"Lumbridge Castle bank (top floor)","carry":null},{"key":"NEMUS_RETREAT","name":"Nemus Retreat","travel":"Pendant of Ates → Nemus Retreat, run north (or quetzal to Auburnvale)","bank":null,"carry":"Pendant of Ates"},{"key":"KASTORI","name":"Kastori","travel":"Quetzal or Pendant of Ates → Kastori (fruit tree, then calquat)","bank":null,"carry":"Pendant of Ates"},{"key":"LOCUS_OASIS","name":"Locus Oasis","travel":"Fairy ring AJP, run south-east","bank":null,"carry":null},{"key":"LLETYA","name":"Lletya","travel":"Teleport crystal → Lletya, run south-east","bank":"Lletya bank","carry":"Teleport crystal"},{"key":"SUMMER_SHORE","name":"The Summer Shore","travel":"Fairy ring CJQ, run south then west","bank":null,"carry":null},{"key":"ANGLERS_RETREAT","name":"Anglers' Retreat","travel":"Sail or take the rowboat from Corsair Cove (51 Sailing)","bank":null,"carry":null},{"key":"FOSSIL_ISLAND","name":"Fossil Island","travel":"Digsite pendant → Fossil Island, Mushroom Forest","bank":null,"carry":"Digsite pendant"}],"fallbackBank":"Teleport to house → jewellery box: Ring of dueling → Castle Wars bank","locations":[{"key":"TREE_FARMING_GUILD","type":"TREE","step":"FARMING_GUILD","count":1,"patchName":null,"req":"65 Farming"},{"key":"TREE_GNOME_STRONGHOLD","type":"TREE","step":"GNOME_STRONGHOLD","count":1,"patchName":null,"req":null},{"key":"TREE_FALADOR","type":"TREE","step":"FALADOR","count":1,"patchName":null,"req":null},{"key":"TREE_TAVERLEY","type":"TREE","step":"TAVERLEY","count":1,"patchName":null,"req":"66 Agility for the Falador wall shortcut"},{"key":"TREE_VARROCK","type":"TREE","step":"VARROCK","count":1,"patchName":null,"req":null},{"key":"TREE_LUMBRIDGE","type":"TREE","step":"LUMBRIDGE","count":1,"patchName":null,"req":null},{"key":"TREE_NEMUS_RETREAT","type":"TREE","step":"NEMUS_RETREAT","count":1,"patchName":null,"req":"Children of the Sun"},{"key":"FRUIT_FARMING_GUILD","type":"FRUIT_TREE","step":"FARMING_GUILD","count":1,"patchName":null,"req":"85 Farming"},{"key":"FRUIT_GNOME_STRONGHOLD","type":"FRUIT_TREE","step":"GNOME_STRONGHOLD","count":1,"patchName":null,"req":null},{"key":"FRUIT_TREE_GNOME_VILLAGE","type":"FRUIT_TREE","step":"TREE_GNOME_VILLAGE","count":1,"patchName":null,"req":"Tree Gnome Village (for the spirit tree)"},{"key":"FRUIT_CATHERBY","type":"FRUIT_TREE","step":"CATHERBY","count":1,"patchName":null,"req":null},{"key":"FRUIT_BRIMHAVEN","type":"FRUIT_TREE","step":"BRIMHAVEN","count":1,"patchName":null,"req":null},{"key":"FRUIT_KASTORI","type":"FRUIT_TREE","step":"KASTORI","count":1,"patchName":null,"req":"Children of the Sun"},{"key":"FRUIT_LLETYA","type":"FRUIT_TREE","step":"LLETYA","count":1,"patchName":null,"req":"Mourning's End Part I (partial)"},{"key":"CALQUAT_TAI_BWO_WANNAI","type":"CALQUAT","step":"TAI_BWO_WANNAI","count":1,"patchName":null,"req":null},{"key":"CALQUAT_KASTORI","type":"CALQUAT","step":"KASTORI","count":1,"patchName":null,"req":"Children of the Sun"},{"key":"CALQUAT_SUMMER_SHORE","type":"CALQUAT","step":"SUMMER_SHORE","count":1,"patchName":null,"req":"Troubled Tortugans (partial); 50 Agility via fairy ring"},{"key":"CELASTRUS_FARMING_GUILD","type":"CELASTRUS","step":"FARMING_GUILD","count":1,"patchName":null,"req":"85 Farming"},{"key":"REDWOOD_FARMING_GUILD","type":"REDWOOD","step":"FARMING_GUILD","count":1,"patchName":null,"req":"90 Farming"},{"key":"HESPORI_FARMING_GUILD","type":"HESPORI","step":"FARMING_GUILD","count":1,"patchName":null,"req":"65 Farming"},{"key":"HARDWOOD_LOCUS_OASIS","type":"HARDWOOD","step":"LOCUS_OASIS","count":1,"patchName":null,"req":"The Ribbiting Tale of a Lily Pad Labour Dispute"},{"key":"HARDWOOD_ANGLERS_RETREAT","type":"HARDWOOD","step":"ANGLERS_RETREAT","count":1,"patchName":null,"req":"51 Sailing (rowboat route: build it with 50 Construction)"},{"key":"HARDWOOD_FOSSIL_ISLAND_EAST","type":"HARDWOOD","step":"FOSSIL_ISLAND","count":1,"patchName":"East","req":"Bone Voyage"},{"key":"HARDWOOD_FOSSIL_ISLAND_MIDDLE","type":"HARDWOOD","step":"FOSSIL_ISLAND","count":1,"patchName":"Middle","req":"Bone Voyage"},{"key":"HARDWOOD_FOSSIL_ISLAND_WEST","type":"HARDWOOD","step":"FOSSIL_ISLAND","count":1,"patchName":"West","req":"Bone Voyage"}]};
 // JavaScript port of the plugin's planner (XpTable, RunPlanner, XpProjection,
 // SupplyCalculator, InventoryPlanner). Kept line-for-line with the Java so the preview
 // shows the same numbers. DATA is the JSON exported by ExportPreviewData.
@@ -270,7 +313,7 @@ function makePlanner(DATA) {
     const reached = xp >= goalXp;
     return { runs: run, reached, avg: run === 0 ? 0 : (Math.min(xp, goalXp) - currentXp) / run, plantings };
   }
-  const toGoal = (xp, s) => simulate(xp, xpForLevel(s.goalLevel), s, 5000);
+  const toGoal = (xp, s) => simulate(xp, s.goalXp != null ? s.goalXp : xpForLevel(s.goalLevel), s, 5000);
   const forRuns = (xp, runs, s) => simulate(xp, Infinity, s, runs);
 
   function supplies(plantings, have) {
@@ -278,10 +321,10 @@ function makePlanner(DATA) {
     for (const c of DATA.crops) {
       const count = plantings[c.key];
       if (!count) continue;
-      crops.push({ name: c.seedOnly ? c.planted : c.name, payment: false, need: count, have: have(c.key) });
+      crops.push({ key: c.key, name: c.seedOnly ? c.planted : c.name, payment: false, need: count, have: have(c.key) });
       if (c.payment) payNeed.set(c.payment, (payNeed.get(c.payment) || 0) + count * c.paymentQty);
     }
-    const pays = [...payNeed].map(([name, need]) => ({ name, payment: true, need, have: have(name) }));
+    const pays = [...payNeed].map(([name, need]) => ({ key: name, name, payment: true, need, have: have(name) }));
     return crops.concat(pays);
   }
 
@@ -331,16 +374,34 @@ function makePlanner(DATA) {
 const P = makePlanner(DATA);
 const $ = id => document.getElementById(id);
 const fmt = n => Math.round(n).toLocaleString('en-US');
+const fmtK = n => n == null ? '–' : n < 1000 ? String(Math.round(n)) : n < 1e6 ? (n / 1000).toFixed(n < 1e4 ? 1 : 0) + 'k' : (n / 1e6).toFixed(1) + 'M';
+const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+const row = (l, r) => '<div class="row"><span>' + esc(l) + '</span><span>' + esc(r) + '</span></div>';
+const TYPE_LABEL = { TREE: 'Tree', FRUIT_TREE: 'Fruit tree', CALQUAT: 'Calquat', CELASTRUS: 'Celastrus', HARDWOOD: 'Hardwood', REDWOOD: 'Redwood', HESPORI: 'Hespori' };
+
+// Sample OSRS Wiki prices (gp each). Seeds by crop, payments by item name. Hespori seeds can't be traded.
+const PRICE = {
+  OAK: 89, WILLOW: 37, MAPLE: 2172, YEW: 12655, MAGIC: 82092,
+  APPLE: 14, BANANA: 26, ORANGE: 26, CURRY: 52, PINEAPPLE: 64, PAPAYA: 1046, PALM: 10308, DRAGONFRUIT: 149900,
+  TEAK: 73, MAHOGANY: 69, CAMPHOR: 3067, IRONWOOD: 31248, ROSEWOOD: 145253,
+  CALQUAT: 288, CELASTRUS: 11393, REDWOOD: 10932, HESPORI: null,
+  'Tomatoes(5)': 664, 'Apples(5)': 759, 'Oranges(5)': 1771, 'Cactus spine': 947, 'Coconut': 911,
+  'Sweetcorn': 80, 'Strawberries(5)': 587, 'Bananas(5)': 754, 'Watermelon': 3, 'Pineapple': 171, 'Papaya fruit': 1388,
+  'Limpwurt root': 193, 'Yanillian hops': 551, 'White berries': 741, 'Curry leaf': 57, 'Dragonfruit': 423,
+  'Poison ivy berries': 200, 'Potato cactus': 46,
+};
 
 // ---------- sample account ----------
 const START_XP = 4842295; // level 89
 const sim = {
   xp: START_XP,
-  now: Date.UTC(2026, 9, 25, 17, 0),
+  now: Date.UTC(2026, 9, 28, 14, 0),
   active: false, startXp: 0,
   done: new Set(), plantedAt: {}, runXp: [],
-  // Sample bank: crop rows count seeds/seedlings/saplings; payments by item name.
+  // Bank: crop rows count seeds/seedlings/saplings; payments by item name.
   bank: { YEW: 60, PAPAYA: 400, CALQUAT: 20, CELASTRUS: 12, 'Cactus spine': 1200, 'Pineapple': 900, 'Poison ivy berries': 160, 'Potato cactus': 96 },
+  // Farming Guild seed vault: seeds only.
+  vault: { YEW: 40, IRONWOOD: 30, CALQUAT: 50, CELASTRUS: 20, REDWOOD: 6, MAGIC: 5 },
 };
 
 // ---------- settings ----------
@@ -354,41 +415,76 @@ for (const [id, type] of Object.entries(choices)) {
     sel.appendChild(o);
   }
 }
-const groupName = { TREE: 'Tree patches', FRUIT_TREE: 'Fruit tree patches', CALQUAT: 'Calquat patches', CELASTRUS: 'Celastrus', REDWOOD: 'Redwood', HESPORI: 'Hespori', HARDWOOD: 'Hardwood patches' };
-const groupOrder = ['TREE', 'FRUIT_TREE', 'CALQUAT', 'CELASTRUS', 'REDWOOD', 'HESPORI', 'HARDWOOD'];
-const toggleLocs = DATA.locations.slice().sort((a, b) => groupOrder.indexOf(a.type) - groupOrder.indexOf(b.type));
-let lastGroup = null;
-for (const l of toggleLocs) {
-  if (l.type !== lastGroup) {
-    lastGroup = l.type;
-    const g = document.createElement('div'); g.className = 'group'; g.textContent = groupName[l.type];
-    $('patchFields').appendChild(g);
+
+const enabledLocs = new Set(DATA.locations.map(l => l.key));
+let bankSeq = 1;
+// Example bank stop so the feature shows up; remove it or add your own.
+let bankStops = [{ id: 'b' + bankSeq++, step: 'CATHERBY', pos: 'before', name: 'Catherby bank' }];
+const STEP_ORDER = DATA.steps.map(s => s.key);
+
+function bankEditRow(b) {
+  return '<div class="bankedit"><div class="bankline1"><span>Bank</span><input type="text" id="bank_' + b.id + '" data-bank="' + b.id + '" value="' + esc(b.name)
+    + '" placeholder="Where you bank, e.g. Catherby bank" aria-label="Bank location"><button type="button" data-removebank="' + b.id + '" aria-label="Remove bank stop" title="Remove">✕</button></div>'
+    + '<select id="bankpos_' + b.id + '" data-bankpos="' + b.id + '" aria-label="When to bank">'
+    + '<option value="before"' + (b.pos === 'before' ? ' selected' : '') + '>Before the patches here</option>'
+    + '<option value="after"' + (b.pos === 'after' ? ' selected' : '') + '>After the patches here</option></select></div>';
+}
+
+function renderRouteEditor() {
+  let h = '';
+  for (const stepKey of STEP_ORDER) {
+    const locs = DATA.locations.filter(l => l.step === stepKey);
+    if (!locs.length) continue;
+    h += '<div class="rs"><div class="rs-head">' + esc(P.STEPS[stepKey].name) + '</div>';
+    for (const b of bankStops.filter(b => b.step === stepKey && b.pos === 'before')) h += bankEditRow(b);
+    for (const l of locs) {
+      const label = TYPE_LABEL[l.type] + (l.patchName ? ' (' + l.patchName + ')' : '');
+      h += '<label class="field"><span>' + esc(label) + (l.req ? '<span class="req">' + esc(l.req) + '</span>' : '') + '</span>'
+        + '<input type="checkbox" data-loc="' + l.key + '" id="loc_' + l.key + '"' + (enabledLocs.has(l.key) ? ' checked' : '') + '></label>';
+    }
+    for (const b of bankStops.filter(b => b.step === stepKey && b.pos === 'after')) h += bankEditRow(b);
+    h += '<button type="button" class="linkbtn" data-addbank="' + stepKey + '">+ Add bank stop at ' + esc(P.STEPS[stepKey].name) + '</button></div>';
   }
-  const lab = document.createElement('label'); lab.className = 'field';
-  const step = P.STEPS[l.step].name + (l.patchName ? ' (' + l.patchName + ')' : '');
-  lab.innerHTML = '<span>' + step + (l.req ? '<span class="req">' + l.req + '</span>' : '') + '</span>';
-  const cb = document.createElement('input'); cb.type = 'checkbox'; cb.checked = true; cb.id = 'loc_' + l.key; cb.dataset.loc = l.key;
-  lab.appendChild(cb); $('patchFields').appendChild(lab);
+  $('routeFields').innerHTML = h;
 }
 
 function settings() {
-  const crops = { TREE: $('treeCrop').value, FRUIT_TREE: $('fruitCrop').value, HARDWOOD: $('hardwoodCrop').value };
-  crops.CALQUAT = 'CALQUAT'; crops.CELASTRUS = 'CELASTRUS'; crops.REDWOOD = 'REDWOOD'; crops.HESPORI = 'HESPORI';
-  const enabled = new Set(DATA.locations.filter(l => {
-    const cb = $('loc_' + l.key); return cb ? cb.checked : true;
-  }).map(l => l.key));
+  const crops = { TREE: $('treeCrop').value, FRUIT_TREE: $('fruitCrop').value, HARDWOOD: $('hardwoodCrop').value,
+    CALQUAT: 'CALQUAT', CELASTRUS: 'CELASTRUS', REDWOOD: 'REDWOOD', HESPORI: 'HESPORI' };
   const clamp = (v, lo, hi, d) => { v = parseInt(v, 10); return isNaN(v) ? d : Math.max(lo, Math.min(hi, v)); };
   return {
-    crops, enabled,
-    goalLevel: clamp($('goalLevel').value, 90, 99, 99),
+    crops, enabled: new Set(enabledLocs),
+    goalType: $('goalType').value,
+    goalLevel: clamp($('goalLevel').value, 2, 99, 99),
+    goalXp: $('goalType').value === 'level' ? P.xpForLevel(clamp($('goalLevel').value, 2, 99, 99))
+      : clamp(String($('goalXp').value).replace(/[^0-9]/g, ''), 1, 200000000, 13034431),
     runsPerDay: clamp($('runsPerDay').value, 1, 4, 1),
-    reservedSlots: clamp($('reservedSlots').value, 0, 20, 3),
-    pickProduce: $('pickProduce').checked,
+    reservedSlots: 0, pickProduce: false,
   };
 }
 
-// ---------- run tracking (mirrors the plugin) ----------
+// ---------- run items: patches plus bank stops, in route order ----------
 function tasksNow(s) { return P.buildTasks(s, P.levelForXp(sim.xp), sim.plantedAt, sim.now); }
+function routeItems(tasks) {
+  const items = [];
+  for (const stepKey of STEP_ORDER) {
+    for (const b of bankStops) if (b.step === stepKey && b.pos === 'before') items.push({ kind: 'bank', b, key: 'bank:' + b.id, stepKey });
+    for (const t of tasks) if (t.step.key === stepKey) items.push({ kind: 'patch', t, key: t.key, stepKey });
+    for (const b of bankStops) if (b.step === stepKey && b.pos === 'after') items.push({ kind: 'bank', b, key: 'bank:' + b.id, stepKey });
+  }
+  return items;
+}
+// The next thing to do: an unplanted due patch, or a bank stop with unplanted patches after it.
+function nextItem(items) {
+  for (let i = 0; i < items.length; i++) {
+    const it = items[i];
+    if (sim.done.has(it.key)) continue;
+    if (it.kind === 'patch' && it.t.due) return it;
+    if (it.kind === 'bank' && items.slice(i + 1).some(x => x.kind === 'patch' && x.t.due && !sim.done.has(x.key))) return it;
+  }
+  return null;
+}
+
 function markDone(t, s) {
   sim.done.add(t.key);
   if (t.crop.growth > 1440 / s.runsPerDay) sim.plantedAt[t.key] = sim.now;
@@ -397,57 +493,68 @@ function beginRun() { sim.active = true; sim.startXp = sim.xp; sim.done.clear();
 function endRun() { if (!sim.active) return; const g = sim.xp - sim.startXp; if (g > 0) sim.runXp.push(g); sim.active = false; }
 function finishIfComplete(tasks) { if (tasks.every(t => !t.due || sim.done.has(t.key))) endRun(); }
 
-function plantNext() {
+let lastMatch = null;
+function simulateNext() {
   const s = settings(); const tasks = tasksNow(s);
-  const next = tasks.find(t => t.due && !sim.done.has(t.key));
+  const next = nextItem(routeItems(tasks));
   if (!next) { toast('Nothing due. Try Next day.'); return; }
   if (!sim.active) beginRun();
-  sim.xp += next.crop.xp; // in game: check-health + planting XP
-  markDone(next, s);
-  lastMatch = next.crop.name + ' – ' + next.step.name + (next.loc.patchName ? ' (' + next.loc.patchName + ')' : '');
-  toast('+' + fmt(next.crop.xp) + ' Farming XP');
-  finishIfComplete(tasks);
+  if (next.kind === 'bank') {
+    sim.done.add(next.key);
+    toast('Banked at ' + (next.b.name || 'the bank'));
+  } else {
+    sim.xp += next.t.crop.xp;
+    markDone(next.t, s);
+    lastMatch = patchLabel(next.t) + ' – ' + next.t.step.name;
+    toast('+' + fmt(next.t.crop.xp) + ' Farming XP');
+    finishIfComplete(tasks);
+  }
   render();
 }
-function toggleTask(key) {
+function toggleItem(key) {
   const s = settings(); const tasks = tasksNow(s);
   if (sim.done.delete(key)) { render(); return; }
   if (!sim.active) beginRun();
-  const t = tasks.find(t => t.key === key); if (t) markDone(t, s);
-  finishIfComplete(tasks); render();
+  if (key.startsWith('bank:')) sim.done.add(key);
+  else { const t = tasks.find(t => t.key === key); if (t) markDone(t, s); finishIfComplete(tasks); }
+  render();
 }
 function nextDay() { if (sim.active) endRun(); sim.now += 24 * 3600 * 1000; sim.done.clear(); toast('A day passes'); render(); }
 
 let toastTimer;
 function toast(msg) { const el = $('toast'); el.textContent = msg; el.classList.add('show'); clearTimeout(toastTimer); toastTimer = setTimeout(() => el.classList.remove('show'), 1100); }
 
+// Run tab label: just the crop, plus East/Middle/West where a stop has several of the same patch.
+const patchLabel = t => t.crop.name + (t.loc.patchName ? ' (' + t.loc.patchName + ')' : '');
+// Only "Ready in…" notes are shown; level-locked patches are just greyed out.
+const noteFor = t => (!t.due && t.note && t.note.startsWith('Ready')) ? ' (' + t.note + ')' : '';
+
 // ---------- render ----------
 let tab = 'xp';
-let lastMatch = null;
-const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-const row = (l, r) => '<div class="row"><span>' + esc(l) + '</span><span>' + esc(r) + '</span></div>';
 
 function compute() {
   const s = settings();
-  const goalXp = P.xpForLevel(s.goalLevel);
+  const goalXp = s.goalXp;
   const planned = P.toGoal(sim.xp, s);
   const recent = sim.runXp.slice(-5);
   const actual = recent.length ? recent.reduce((a, b) => a + b, 0) / recent.length : 0;
   let runsLeft = actual > 0 ? (sim.xp >= goalXp ? 0 : Math.ceil((goalXp - sim.xp) / actual)) : (planned.reached ? planned.runs : -1);
   const plantings = runsLeft > 0 ? P.forRuns(sim.xp, runsLeft, s).plantings : {};
-  const supplies = P.supplies(plantings, k => sim.bank[k] || 0);
+  const supplies = P.supplies(plantings, k => (sim.bank[k] || 0) + (sim.vault[k] || 0));
   const tasks = tasksNow(s);
-  const plan = P.inventoryPlan(tasks, s);
-  return { s, goalXp, planned, actual, counted: recent.length, runsLeft, supplies, tasks, plan, level: P.levelForXp(sim.xp) };
+  return { s, goalXp, planned, actual, counted: recent.length, runsLeft, supplies, tasks, items: routeItems(tasks), level: P.levelForXp(sim.xp) };
 }
 
 function renderXp(d) {
-  const lvl = Math.min(d.level, d.s.goalLevel), base = P.xpForLevel(lvl);
+  const byLevel = d.s.goalType === 'level';
+  // Level goals fill the bar from the start of your current level; XP goals from zero.
+  const base = byLevel ? P.xpForLevel(Math.min(d.level, d.s.goalLevel)) : 0;
   const pct = Math.max(0, Math.min(1, (sim.xp - base) / Math.max(1, d.goalXp - base)));
   const remaining = Math.max(0, d.goalXp - sim.xp);
-  let h = '<div class="h">Level ' + d.level + ' → ' + d.s.goalLevel + '</div>'
+  let h = '<div class="h">' + (byLevel ? 'Level ' + d.level + ' → ' + d.s.goalLevel : 'Goal: ' + fmt(d.goalXp) + ' XP') + '</div>'
+    + (byLevel ? '' : row('Current XP', fmt(sim.xp) + ' (level ' + d.level + ')'))
     + '<div class="bar"><i style="width:' + (pct * 100).toFixed(1) + '%"></i><b>' + fmt(remaining) + ' XP to go</b></div>';
-  if (remaining === 0) return h + '<div class="ok">Goal reached. Enjoy the cape!</div>';
+  if (remaining === 0) return h + '<div class="ok">Goal reached.' + (d.level >= 99 ? ' Enjoy the cape!' : '') + '</div>';
   if (d.runsLeft > 0) {
     const days = Math.ceil(d.runsLeft / d.s.runsPerDay);
     const date = new Date(sim.now + days * 86400000).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
@@ -467,47 +574,63 @@ function renderRun(d) {
   const due = d.tasks.filter(t => t.due), doneN = due.filter(t => sim.done.has(t.key)).length;
   let h = '<div class="h">' + (sim.active ? 'Run in progress: ' + doneN + '/' + due.length : 'Ready: ' + due.length + ' patches due') + '</div>'
     + '<div class="btn-row"><button class="rl-btn" type="button" data-act="new">New run</button><button class="rl-btn" type="button" data-act="finish"' + (sim.active ? '' : ' disabled') + '>Finish run</button></div>'
-    + '<div class="muted">Planting ticks off the exact patch you planted, in any order. Click to tick or untick by hand.</div>'
+    + '<div class="muted">Planting ticks off the exact patch you planted, in any order. Opening your bank ticks the next bank stop.</div>'
     + (lastMatch ? '<div class="ok">Last planted: ' + esc(lastMatch) + '</div>' : '');
-  let step = null;
-  for (const t of d.tasks) {
-    if (t.step !== step) { step = t.step; h += '<div class="h loc">' + esc(step.name) + '</div><div class="muted">' + esc(step.travel) + '</div>'; }
-    const label = t.crop.name + ' – ' + ({ TREE: 'Tree', FRUIT_TREE: 'Fruit tree', CALQUAT: 'Calquat', CELASTRUS: 'Celastrus', HARDWOOD: 'Hardwood', REDWOOD: 'Redwood', HESPORI: 'Hespori' })[t.loc.type]
-      + (t.loc.patchName ? ' (' + t.loc.patchName + ')' : '') + (t.due ? '' : ' (' + t.note + ')');
-    h += '<label class="check' + (t.due ? '' : ' notdue') + '"><input type="checkbox" data-task="' + t.key + '"' + (sim.done.has(t.key) ? ' checked' : '') + (t.due ? '' : ' disabled') + '><span>' + esc(label) + '</span></label>';
+  h += runNeeds(due);
+  let stepKey = null;
+  for (const it of d.items) {
+    if (it.stepKey !== stepKey) {
+      stepKey = it.stepKey; const step = P.STEPS[stepKey];
+      h += '<div class="h loc">' + esc(step.name) + '</div><div class="muted">' + esc(step.travel) + '</div>';
+    }
+    if (it.kind === 'patch') {
+      const t = it.t;
+      h += '<label class="check' + (t.due ? '' : ' notdue') + '"><input type="checkbox" data-item="' + t.key + '"' + (sim.done.has(t.key) ? ' checked' : '') + (t.due ? '' : ' disabled')
+        + '><span>' + esc(patchLabel(t) + noteFor(t)) + '</span></label>';
+    } else {
+      h += '<label class="check bankstop"><input type="checkbox" data-item="' + it.key + '"' + (sim.done.has(it.key) ? ' checked' : '')
+        + '><span>Bank: ' + esc(it.b.name || 'type a location in Settings') + '</span></label>';
+    }
   }
   if (!d.tasks.length) h += '<div class="muted">No patches enabled. Turn some on in Settings.</div>';
   return h;
 }
 
-function renderSup(d) {
-  let h = '<div class="h">' + (d.runsLeft > 0 ? 'Needed for ' + d.runsLeft + ' runs' : 'Supplies') + '</div>'
-    + '<div class="muted">Crop rows count seeds, seedlings and saplings together. Bank counted when you last opened it, plus your inventory.</div>'
-    + '<div class="grid"><span class="hd">Item</span><span class="hd n">Have</span><span class="hd n">Need</span>';
-  let payHead = false, shortN = 0;
-  for (const l of d.supplies) {
-    if (l.payment && !payHead) { payHead = true; h += '</div><div class="h">Payments</div><div class="grid">'; }
-    const isShort = l.have < l.need; if (isShort) shortN++;
-    h += '<span>' + esc(l.name) + '</span><span class="n ' + (isShort ? 'short' : 'ok') + '">' + fmt(l.have) + '</span><span class="n">' + fmt(l.need) + '</span>';
+// What the patches due on this run need: one line per crop, colored by patch type,
+// with its protection payment beside it.
+function runNeeds(due) {
+  if (!due.length) return '';
+  const byCrop = new Map();
+  for (const t of due) byCrop.set(t.crop.key, { crop: t.crop, n: (byCrop.get(t.crop.key)?.n || 0) + 1 });
+  let saplings = 0, rows = '';
+  for (const { crop, n } of byCrop.values()) {
+    saplings += n;
+    const cls = 't-' + crop.type;
+    rows += '<span class="n">' + n + '</span><span class="' + cls + '">' + esc(crop.seedOnly ? crop.planted : crop.name) + '</span>'
+      + (crop.payment ? '<span class="n">' + fmt(n * crop.paymentQty) + '</span><span class="' + cls + '">' + esc(crop.payment) + '</span>'
+                      : '<span class="n"></span><span class="muted">No payment</span>');
   }
-  h += '</div><div class="' + (shortN ? 'short' : 'ok') + '" style="margin-top:6px">' + (shortN ? shortN + ' items short (in red).' : 'You have everything you need.') + '</div>';
-  return h;
+  return '<div class="needs"><div class="needs-title"><span>This run needs</span><span class="muted">' + saplings + ' saplings</span></div>'
+    + '<div class="needs-grid">' + rows + '</div></div>';
 }
 
-function renderInv(d) {
-  const p = d.plan;
-  let h = '<div class="h">Carry the whole run</div><div class="muted">' + p.reserved + ' slots for your own items (spade, coins, house teleport…)</div>';
-  for (const c of p.carry) h += row(c, '1');
-  for (const [name, qty] of p.payments) h += row(name + ' (noted)', fmt(qty));
-  if (p.produce.length) h += '<div class="muted">Keep ' + p.picking + ' slots free to pick each tree, then use the produce on the tool leprechaun. It notes it but doesn\'t bank it, so each noted stack stays in your inventory: ' + esc(p.produce.join(', ')) + '.</div>';
-  const stops = Math.max(0, p.legs.length - 1);
-  h += '<div class="h">' + p.capacity + ' slots for saplings · ' + stops + ' bank stop' + (stops === 1 ? '' : 's') + '</div>';
-  p.legs.forEach((leg, i) => {
-    h += '<div class="bankline">' + (i === 0 ? 'Start: ' : 'Bank: ') + esc(leg.bankAt) + '</div>';
-    for (const [name, qty] of leg.withdraw) h += row('Withdraw ' + name, qty);
-    h += '<div class="route">' + esc(leg.steps.map(s => s.name).join(' → ')) + '</div>';
-  });
-  if (!p.legs.length) h += '<div class="muted">Nothing is due right now.</div>';
+function renderSup(d) {
+  let h = '<div class="h">' + (d.runsLeft > 0 ? 'Needed for ' + d.runsLeft + ' runs' : 'Supplies') + '</div>'
+    + '<div class="muted">Have counts your bank, the Farming Guild seed vault and your inventory, as of the last time you opened each. Crop rows count seeds, seedlings and saplings together.</div>'
+    + row('Bank', 'counted today') + row('Seed vault', 'counted today')
+    + '<div class="grid4" style="margin-top:6px"><span class="hd">Item</span><span class="hd n">Have</span><span class="hd n">Need</span><span class="hd n">GE ea</span>';
+  let payHead = false, shortN = 0, shortCost = 0;
+  for (const l of d.supplies) {
+    if (l.payment && !payHead) { payHead = true; h += '</div><div class="h">Payments</div><div class="grid4">'; }
+    const isShort = l.have < l.need, price = PRICE[l.key];
+    if (isShort) { shortN++; if (price) shortCost += (l.need - l.have) * price; }
+    h += '<span>' + esc(l.name) + '</span><span class="n ' + (isShort ? 'short' : 'ok') + '">' + fmt(l.have) + '</span><span class="n">' + fmt(l.need)
+      + '</span><span class="price">' + fmtK(price) + '</span>';
+  }
+  h += '</div>';
+  h += '<div class="' + (shortN ? 'short' : 'ok') + '" style="margin-top:6px">' + (shortN ? shortN + ' items short (in red).' : 'You have everything you need.') + '</div>';
+  if (shortN) h += row('Cost to buy what\'s short', fmtK(shortCost) + ' gp');
+  h += '<div class="muted">Prices: OSRS Wiki, refreshed by RuneLite. Hespori seeds can\'t be traded.</div>';
   return h;
 }
 
@@ -517,50 +640,78 @@ function renderOverlay(d) {
   el.hidden = false;
   const due = d.tasks.filter(t => t.due), doneN = due.filter(t => sim.done.has(t.key)).length;
   let h = '<div class="title">Tree run ' + doneN + '/' + due.length + '</div>';
-  const next = due.find(t => !sim.done.has(t.key));
+  const next = nextItem(d.items);
   if (!next) { el.innerHTML = h + '<div class="done">All due patches planted.</div>'; return; }
-  const step = next.step;
-  for (let i = 1; i < d.plan.legs.length; i++) {
-    const leg = d.plan.legs[i];
-    if (leg.steps[0] === step && !d.tasks.some(t => t.step === step && sim.done.has(t.key))) { h += '<div class="bank">Bank first: ' + esc(leg.bankAt) + '</div>'; break; }
-  }
+  const step = P.STEPS[next.stepKey];
   h += '<div class="step">' + esc(step.name) + '</div><div class="hint">' + esc(step.travel) + '</div>';
-  for (const t of due.filter(t => t.step === step)) {
-    const isDone = sim.done.has(t.key);
-    h += '<div class="' + (isDone ? 'done' : '') + '">' + (isDone ? '[x] ' : '[ ] ') + esc(t.crop.name + ' ' + ({ TREE: 'tree', FRUIT_TREE: 'fruit tree', CALQUAT: 'calquat', CELASTRUS: 'celastrus', HARDWOOD: 'hardwood', REDWOOD: 'redwood', HESPORI: 'hespori' })[t.loc.type]) + (t.loc.patchName ? ' (' + t.loc.patchName + ')' : '') + '</div>';
+  for (const it of d.items.filter(x => x.stepKey === next.stepKey)) {
+    if (it.kind === 'patch' && !it.t.due) continue;
+    const isDone = sim.done.has(it.key);
+    const label = it.kind === 'bank' ? 'Bank: ' + (it.b.name || 'bank stop') : patchLabel(it.t);
+    h += '<div class="' + (isDone ? 'done' : it.kind === 'bank' ? 'bankstop' : '') + '">' + (isDone ? '[x] ' : '[ ] ') + esc(label) + '</div>';
   }
-  let passed = false, after = null;
-  for (const t of due) { if (t.step === step) passed = true; else if (passed && !sim.done.has(t.key)) { after = t.step; break; } }
-  if (after) h += '<div class="then"><span>Then</span><span>' + esc(after.name) + '</span></div>';
+  const idx = d.items.indexOf(next);
+  const then = d.items.slice(idx + 1).find(x => x.stepKey !== next.stepKey && !sim.done.has(x.key) && (x.kind === 'bank' || x.t.due));
+  if (then) h += '<div class="then"><span>Then</span><span>' + esc(P.STEPS[then.stepKey].name) + '</span></div>';
   el.innerHTML = h;
 }
 
 function render() {
   const d = compute();
-  const body = $('body'); const scroll = body.scrollTop;
-  body.innerHTML = tab === 'xp' ? renderXp(d) : tab === 'run' ? renderRun(d) : tab === 'sup' ? renderSup(d) : renderInv(d);
-  body.scrollTop = scroll;
+  $('xpStats').innerHTML = renderXp(d);
+  const run = $('body-run'), sup = $('body-sup');
+  const rs = run.scrollTop, ss = sup.scrollTop;
+  run.innerHTML = renderRun(d); sup.innerHTML = renderSup(d);
+  run.scrollTop = rs; sup.scrollTop = ss;
   renderOverlay(d);
-  $('clock').textContent = new Date(sim.now).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' })
-    + ' · ' + fmt(sim.xp) + ' XP';
+  $('clock').textContent = new Date(sim.now).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' }) + ' · ' + fmt(sim.xp) + ' XP';
 }
 
 // ---------- wiring ----------
 document.querySelectorAll('.tabs button').forEach(b => b.addEventListener('click', () => {
   tab = b.dataset.tab;
   document.querySelectorAll('.tabs button').forEach(x => x.setAttribute('aria-selected', String(x === b)));
-  $('body').scrollTop = 0; render();
+  for (const k of ['xp', 'run', 'sup']) $('body-' + k).hidden = k !== tab;
 }));
-$('body').addEventListener('change', e => { if (e.target.dataset.task) toggleTask(e.target.dataset.task); });
-$('body').addEventListener('click', e => {
+for (const k of ['run', 'sup']) $('body-' + k).addEventListener('change', e => { if (e.target.dataset.item) toggleItem(e.target.dataset.item); });
+document.querySelector('.side').addEventListener('click', e => {
   const act = e.target.dataset && e.target.dataset.act;
   if (act === 'new') { beginRun(); render(); }
   else if (act === 'finish') { endRun(); render(); }
   else if (act === 'clear') { sim.runXp = []; render(); }
 });
-$('cfg').addEventListener('input', render);
-$('cfg').addEventListener('change', render);
-$('plantBtn').addEventListener('click', plantNext);
+$('cfg').addEventListener('change', e => {
+  const ds = e.target.dataset;
+  if (ds.loc) { e.target.checked ? enabledLocs.add(ds.loc) : enabledLocs.delete(ds.loc); }
+  if (ds.bankpos) { const b = bankStops.find(b => b.id === ds.bankpos); if (b) { b.pos = e.target.value; renderRouteEditor(); const s = $('bankpos_' + b.id); if (s) s.focus(); } }
+  if (e.target.id === 'goalType') {
+    const byXp = e.target.value === 'xp';
+    $('goalLevelRow').hidden = byXp; $('goalXpRow').hidden = !byXp; $('goalXpHint').hidden = !byXp;
+  }
+  if (e.target.id === 'goalXp') {
+    const v = parseInt(String(e.target.value).replace(/[^0-9]/g, ''), 10);
+    if (!isNaN(v)) e.target.value = Math.min(200000000, Math.max(1, v)).toLocaleString('en-US');
+  }
+  render();
+});
+$('cfg').addEventListener('input', e => {
+  if (e.target.dataset.bank) { const b = bankStops.find(b => b.id === e.target.dataset.bank); if (b) b.name = e.target.value; }
+  render();
+});
+$('cfg').addEventListener('click', e => {
+  const add = e.target.dataset.addbank, rem = e.target.dataset.removebank;
+  if (add) {
+    const id = 'b' + bankSeq++;
+    bankStops.push({ id, step: add, pos: 'before', name: '' });
+    renderRouteEditor(); render();
+    const input = $('bank_' + id); if (input) input.focus();
+  } else if (rem) {
+    bankStops = bankStops.filter(b => b.id !== rem); sim.done.delete('bank:' + rem);
+    renderRouteEditor(); render();
+  }
+});
+$('plantBtn').addEventListener('click', simulateNext);
 $('dayBtn').addEventListener('click', nextDay);
+renderRouteEditor();
 render();
 </script>

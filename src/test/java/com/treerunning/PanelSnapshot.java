@@ -1,6 +1,11 @@
 package com.treerunning;
 
-import com.treerunning.core.InventoryPlanner;
+import com.treerunning.core.BankStop;
+import com.treerunning.core.Route;
+import com.treerunning.core.RunNeeds;
+import com.treerunning.core.XpTable;
+import com.treerunning.data.RouteStep;
+import java.util.Collections;
 import com.treerunning.core.PlanSettings;
 import com.treerunning.core.RunPlanner;
 import com.treerunning.core.RunTask;
@@ -45,7 +50,7 @@ public class PanelSnapshot
 		crops.put(PatchType.CELASTRUS, CropType.CELASTRUS);
 		crops.put(PatchType.REDWOOD, CropType.REDWOOD);
 		crops.put(PatchType.HESPORI, CropType.HESPORI);
-		PlanSettings settings = new PlanSettings(crops, EnumSet.allOf(PatchLocation.class), 99, 1, 3, true);
+		PlanSettings settings = new PlanSettings(crops, EnumSet.allOf(PatchLocation.class), XpTable.xpForLevel(99), 1);
 
 		int xp = 4_842_295;
 		XpProjection planned = XpProjection.toGoal(xp, settings);
@@ -59,24 +64,48 @@ public class PanelSnapshot
 		have.put(CropType.YEW.getSapling().getId(), 60);
 		have.put(CropType.PAPAYA.getSeed().getId(), 400);
 		have.put(CropType.YEW.getPayment().getId(), 1200);
-		List<SupplyCalculator.SupplyLine> supplies = SupplyCalculator.compute(
-			XpProjection.forRuns(xp, planned.getRuns(), settings).getPlantings(), id -> have.getOrDefault(id, 0));
+		Map<Integer, Long> price = new HashMap<>();
+		price.put(CropType.YEW.getSeed().getId(), 12_655L);
+		price.put(CropType.PAPAYA.getSeed().getId(), 1_046L);
+		price.put(CropType.IRONWOOD.getSeed().getId(), 31_248L);
+		price.put(CropType.YEW.getPayment().getId(), 947L);
+		price.put(CropType.PAPAYA.getPayment().getId(), 171L);
+		List<BankStop> banks = Collections.singletonList(new BankStop("a", RouteStep.CATHERBY, true, "Catherby bank"));
 
-		PanelData data = new PanelData(true, xp + 52_000, 89, 99, settings.getGoalXp(), planned.getAverageXpPerRun(),
-			planned.getRuns(), 0, 0, planned.getRuns(), false, 1, tasks, done, true, 52_000, supplies,
-			System.currentTimeMillis(), InventoryPlanner.plan(tasks, settings), "Yew – Gnome Stronghold");
+		PanelData data = new PanelData();
+		data.loggedIn = true;
+		data.currentXp = xp + 52_000;
+		data.level = 89;
+		data.goalXp = settings.getGoalXp();
+		data.plannedXpPerRun = planned.getAverageXpPerRun();
+		data.plannedRuns = planned.getRuns();
+		data.runsLeft = planned.getRuns();
+		data.tasks = tasks;
+		data.items = Route.build(tasks, banks);
+		data.done = done;
+		data.runActive = true;
+		data.runXpSoFar = 52_000;
+		data.lastMatch = "Yew – Gnome Stronghold";
+		data.needs = RunNeeds.compute(tasks);
+		data.supplies = SupplyCalculator.compute(XpProjection.forRuns(xp, planned.getRuns(), settings).getPlantings(),
+			id -> have.getOrDefault(id, 0), id -> price.getOrDefault(id, 0L));
+		data.bankSeenAt = System.currentTimeMillis() - 2 * 3_600_000L;
 
 		SwingUtilities.invokeAndWait(() ->
 		{
 			TreeRunningPanel panel = new TreeRunningPanel(null);
+			// Every setting has a default, so an empty implementation is the default config.
+			panel.loadSettings(new TreeRunningConfig()
+			{
+			}, banks, location -> true);
 			panel.update(data);
 			JTabbedPane tabs = (JTabbedPane) panel.getComponent(0);
 			for (int i = 0; i < tabs.getTabCount(); i++)
 			{
 				tabs.setSelectedIndex(i);
-				panel.setSize(new Dimension(242, 900));
+				panel.setSize(new Dimension(242, 2600));
 				layoutAll(panel);
-				BufferedImage image = new BufferedImage(242, 900, BufferedImage.TYPE_INT_RGB);
+				BufferedImage image = new BufferedImage(242, 2600, BufferedImage.TYPE_INT_RGB);
 				Graphics2D g = image.createGraphics();
 				panel.printAll(g);
 				g.dispose();

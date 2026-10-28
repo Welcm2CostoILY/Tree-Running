@@ -71,7 +71,7 @@ function makePlanner(DATA) {
     const reached = xp >= goalXp;
     return { runs: run, reached, avg: run === 0 ? 0 : (Math.min(xp, goalXp) - currentXp) / run, plantings };
   }
-  const toGoal = (xp, s) => simulate(xp, xpForLevel(s.goalLevel), s, 5000);
+  const toGoal = (xp, s) => simulate(xp, s.goalXp != null ? s.goalXp : xpForLevel(s.goalLevel), s, 5000);
   const forRuns = (xp, runs, s) => simulate(xp, Infinity, s, runs);
 
   function supplies(plantings, have) {
@@ -79,10 +79,10 @@ function makePlanner(DATA) {
     for (const c of DATA.crops) {
       const count = plantings[c.key];
       if (!count) continue;
-      crops.push({ name: c.seedOnly ? c.planted : c.name, payment: false, need: count, have: have(c.key) });
+      crops.push({ key: c.key, name: c.seedOnly ? c.planted : c.name, payment: false, need: count, have: have(c.key) });
       if (c.payment) payNeed.set(c.payment, (payNeed.get(c.payment) || 0) + count * c.paymentQty);
     }
-    const pays = [...payNeed].map(([name, need]) => ({ name, payment: true, need, have: have(name) }));
+    const pays = [...payNeed].map(([name, need]) => ({ key: name, name, payment: true, need, have: have(name) }));
     return crops.concat(pays);
   }
 

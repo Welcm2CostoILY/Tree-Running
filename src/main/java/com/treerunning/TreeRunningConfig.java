@@ -1,268 +1,303 @@
 package com.treerunning;
 
+import com.treerunning.data.PatchLocation;
+import java.util.EnumMap;
+import java.util.Map;
 import net.runelite.client.config.Config;
 import net.runelite.client.config.ConfigGroup;
 import net.runelite.client.config.ConfigItem;
-import net.runelite.client.config.ConfigSection;
 import net.runelite.client.config.Range;
 
+/**
+ * Plugin settings. They're all changed from the Settings section of the XP tab, so they're
+ * hidden from RuneLite's own settings list. Key names are kept from earlier versions so
+ * saved choices carry over.
+ */
 @ConfigGroup(TreeRunningConfig.GROUP)
 public interface TreeRunningConfig extends Config
 {
 	String GROUP = "treerunning";
 
-	// ---------------------------------------------------------------- Crops
+	enum GoalType
+	{
+		LEVEL("Level"),
+		XP("XP");
 
-	@ConfigSection(name = "Crops", description = "What to plant in each patch type", position = 0)
-	String crops = "crops";
+		private final String label;
 
-	@ConfigItem(keyName = "treeCrop", name = "Tree patches", description = "Tree planted in all tree patches",
-		position = 0, section = crops)
+		GoalType(String label)
+		{
+			this.label = label;
+		}
+
+		@Override
+		public String toString()
+		{
+			return label;
+		}
+	}
+
+	/** The settings key for each patch's on/off switch. */
+	Map<PatchLocation, String> PATCH_KEYS = Keys.build();
+
+	final class Keys
+	{
+		private static final Map<PatchLocation, String> PATCH_KEYS = new EnumMap<>(PatchLocation.class);
+
+		private Keys()
+		{
+		}
+
+		static Map<PatchLocation, String> build()
+		{
+		PATCH_KEYS.put(PatchLocation.TREE_FARMING_GUILD, "treeFarmingGuild");
+		PATCH_KEYS.put(PatchLocation.TREE_GNOME_STRONGHOLD, "treeGnomeStronghold");
+		PATCH_KEYS.put(PatchLocation.TREE_FALADOR, "treeFalador");
+		PATCH_KEYS.put(PatchLocation.TREE_TAVERLEY, "treeTaverley");
+		PATCH_KEYS.put(PatchLocation.TREE_VARROCK, "treeVarrock");
+		PATCH_KEYS.put(PatchLocation.TREE_LUMBRIDGE, "treeLumbridge");
+		PATCH_KEYS.put(PatchLocation.TREE_NEMUS_RETREAT, "treeNemusRetreat");
+		PATCH_KEYS.put(PatchLocation.FRUIT_FARMING_GUILD, "fruitFarmingGuild");
+		PATCH_KEYS.put(PatchLocation.FRUIT_GNOME_STRONGHOLD, "fruitGnomeStronghold");
+		PATCH_KEYS.put(PatchLocation.FRUIT_TREE_GNOME_VILLAGE, "fruitTreeGnomeVillage");
+		PATCH_KEYS.put(PatchLocation.FRUIT_CATHERBY, "fruitCatherby");
+		PATCH_KEYS.put(PatchLocation.FRUIT_BRIMHAVEN, "fruitBrimhaven");
+		PATCH_KEYS.put(PatchLocation.FRUIT_KASTORI, "fruitKastori");
+		PATCH_KEYS.put(PatchLocation.FRUIT_LLETYA, "fruitLletya");
+		PATCH_KEYS.put(PatchLocation.CALQUAT_TAI_BWO_WANNAI, "calquatTaiBwoWannai");
+		PATCH_KEYS.put(PatchLocation.CALQUAT_KASTORI, "calquatKastori");
+		PATCH_KEYS.put(PatchLocation.CALQUAT_SUMMER_SHORE, "calquatSummerShore");
+		PATCH_KEYS.put(PatchLocation.CELASTRUS_FARMING_GUILD, "celastrusFarmingGuild");
+		PATCH_KEYS.put(PatchLocation.REDWOOD_FARMING_GUILD, "redwoodFarmingGuild");
+		PATCH_KEYS.put(PatchLocation.HESPORI_FARMING_GUILD, "hesporiFarmingGuild");
+		PATCH_KEYS.put(PatchLocation.HARDWOOD_LOCUS_OASIS, "hardwoodLocusOasis");
+		PATCH_KEYS.put(PatchLocation.HARDWOOD_ANGLERS_RETREAT, "hardwoodAnglersRetreat");
+		PATCH_KEYS.put(PatchLocation.HARDWOOD_FOSSIL_ISLAND_EAST, "hardwoodFossilEast");
+		PATCH_KEYS.put(PatchLocation.HARDWOOD_FOSSIL_ISLAND_MIDDLE, "hardwoodFossilMiddle");
+		PATCH_KEYS.put(PatchLocation.HARDWOOD_FOSSIL_ISLAND_WEST, "hardwoodFossilWest");
+			return PATCH_KEYS;
+		}
+	}
+
+	@ConfigItem(keyName = "treeCrop", name = "Tree patches", description = "", hidden = true)
 	default CropChoices.Tree treeCrop()
 	{
 		return CropChoices.Tree.YEW;
 	}
 
-	@ConfigItem(keyName = "fruitCrop", name = "Fruit tree patches", description = "Fruit tree planted in all fruit tree patches",
-		position = 1, section = crops)
+	@ConfigItem(keyName = "fruitCrop", name = "Fruit tree patches", description = "", hidden = true)
 	default CropChoices.Fruit fruitCrop()
 	{
 		return CropChoices.Fruit.PAPAYA;
 	}
 
-	@ConfigItem(keyName = "hardwoodCrop", name = "Hardwood patches", description = "Hardwood tree planted in hardwood patches",
-		position = 2, section = crops)
+	@ConfigItem(keyName = "hardwoodCrop", name = "Hardwood patches", description = "", hidden = true)
 	default CropChoices.Hardwood hardwoodCrop()
 	{
 		return CropChoices.Hardwood.IRONWOOD;
 	}
 
-
-
-
-
-	// ---------------------------------------------------------------- Goal
-
-	@ConfigSection(name = "Goal", description = "Your Farming goal", position = 1)
-	String goal = "goal";
+	@ConfigItem(keyName = "goalType", name = "Goal type", description = "", hidden = true)
+	default GoalType goalType()
+	{
+		return GoalType.LEVEL;
+	}
 
 	@Range(min = 2, max = 99)
-	@ConfigItem(keyName = "goalLevel", name = "Goal level", description = "Farming level you're working toward", position = 0, section = goal)
+
+	@ConfigItem(keyName = "goalLevel", name = "Goal level", description = "", hidden = true)
 	default int goalLevel()
 	{
 		return 99;
 	}
 
+	@Range(min = 1, max = 200_000_000)
+
+	@ConfigItem(keyName = "goalXp", name = "Goal XP", description = "", hidden = true)
+	default int goalXp()
+	{
+		return 13_034_431;
+	}
+
 	@Range(min = 1, max = 4)
-	@ConfigItem(keyName = "runsPerDay", name = "Runs per day", description = "How many tree runs you do a day (used for ETA and growth timing)",
-		position = 1, section = goal)
+
+	@ConfigItem(keyName = "runsPerDay", name = "Runs per day", description = "", hidden = true)
 	default int runsPerDay()
 	{
 		return 1;
 	}
 
 	@Range(min = 1, max = 20)
-	@ConfigItem(keyName = "averageOver", name = "Average over last N runs",
-		description = "How many recent runs the XP countdown averages", position = 2, section = goal)
+
+	@ConfigItem(keyName = "averageOver", name = "Average over last N runs", description = "", hidden = true)
 	default int averageOver()
 	{
 		return 5;
 	}
 
-	// ---------------------------------------------------------------- Inventory
-
-	@ConfigSection(name = "Inventory", description = "Inventory plan settings", position = 2)
-	String inventory = "inventory";
-
-	@Range(min = 0, max = 20)
-	@ConfigItem(keyName = "reservedSlots", name = "Always-carried slots",
-		description = "Slots for your own items on every run (spade, coins, house teleport, etc.). Teleport items the route needs are added automatically.",
-		position = 0, section = inventory)
-	default int reservedSlots()
-	{
-		return 3;
-	}
-
-	@ConfigItem(keyName = "pickProduce", name = "Pick fruit",
-		description = "Plan space for picking fruit and noting it at the leprechaun (the leprechaun notes, it doesn't bank)",
-		position = 1, section = inventory)
-	default boolean pickProduce()
-	{
-		return true;
-	}
-
-	// ---------------------------------------------------------------- Overlay
-
-	@ConfigSection(name = "Overlay", description = "In-game checklist overlay", position = 3)
-	String overlay = "overlay";
-
-	@ConfigItem(keyName = "showOverlay", name = "Show checklist overlay", description = "Show the current stop and its patches in game",
-		position = 0, section = overlay)
+	@ConfigItem(keyName = "showOverlay", name = "Show checklist overlay", description = "", hidden = true)
 	default boolean showOverlay()
 	{
 		return true;
 	}
 
-	@ConfigItem(keyName = "overlayOnlyDuringRun", name = "Only during a run", description = "Hide the overlay when no run is in progress",
-		position = 1, section = overlay)
+	@ConfigItem(keyName = "overlayOnlyDuringRun", name = "Only during a run", description = "", hidden = true)
 	default boolean overlayOnlyDuringRun()
 	{
 		return false;
 	}
 
-	// ---------------------------------------------------------------- Patches
+	@ConfigItem(keyName = "bankStops", name = "Bank stops", description = "", hidden = true)
+	default String bankStops()
+	{
+		return "[]";
+	}
 
-	@ConfigSection(name = "Patches", description = "Every patch on the run. Untick any you can't or don't want to use.", position = 4)
-	String patches = "patches";
-
-	@ConfigItem(keyName = "treeFarmingGuild", name = "Tree: Farming Guild", description = "Needs 65 Farming", position = 0, section = patches)
+	@ConfigItem(keyName = "treeFarmingGuild", name = "treeFarmingGuild", description = "", hidden = true)
 	default boolean treeFarmingGuild()
 	{
 		return true;
 	}
 
-	@ConfigItem(keyName = "treeGnomeStronghold", name = "Tree: Gnome Stronghold", description = "", position = 1, section = patches)
+	@ConfigItem(keyName = "treeGnomeStronghold", name = "treeGnomeStronghold", description = "", hidden = true)
 	default boolean treeGnomeStronghold()
 	{
 		return true;
 	}
 
-	@ConfigItem(keyName = "treeFalador", name = "Tree: Falador Park", description = "", position = 2, section = patches)
+	@ConfigItem(keyName = "treeFalador", name = "treeFalador", description = "", hidden = true)
 	default boolean treeFalador()
 	{
 		return true;
 	}
 
-	@ConfigItem(keyName = "treeTaverley", name = "Tree: Taverley", description = "66 Agility for the Falador shortcut", position = 3, section = patches)
+	@ConfigItem(keyName = "treeTaverley", name = "treeTaverley", description = "", hidden = true)
 	default boolean treeTaverley()
 	{
 		return true;
 	}
 
-	@ConfigItem(keyName = "treeVarrock", name = "Tree: Varrock", description = "", position = 4, section = patches)
+	@ConfigItem(keyName = "treeVarrock", name = "treeVarrock", description = "", hidden = true)
 	default boolean treeVarrock()
 	{
 		return true;
 	}
 
-	@ConfigItem(keyName = "treeLumbridge", name = "Tree: Lumbridge", description = "", position = 5, section = patches)
+	@ConfigItem(keyName = "treeLumbridge", name = "treeLumbridge", description = "", hidden = true)
 	default boolean treeLumbridge()
 	{
 		return true;
 	}
 
-	@ConfigItem(keyName = "treeNemusRetreat", name = "Tree: Nemus Retreat", description = "Children of the Sun", position = 6, section = patches)
+	@ConfigItem(keyName = "treeNemusRetreat", name = "treeNemusRetreat", description = "", hidden = true)
 	default boolean treeNemusRetreat()
 	{
 		return true;
 	}
 
-	@ConfigItem(keyName = "fruitFarmingGuild", name = "Fruit: Farming Guild", description = "85 Farming", position = 7, section = patches)
+	@ConfigItem(keyName = "fruitFarmingGuild", name = "fruitFarmingGuild", description = "", hidden = true)
 	default boolean fruitFarmingGuild()
 	{
 		return true;
 	}
 
-	@ConfigItem(keyName = "fruitGnomeStronghold", name = "Fruit: Gnome Stronghold", description = "", position = 8, section = patches)
+	@ConfigItem(keyName = "fruitGnomeStronghold", name = "fruitGnomeStronghold", description = "", hidden = true)
 	default boolean fruitGnomeStronghold()
 	{
 		return true;
 	}
 
-	@ConfigItem(keyName = "fruitTreeGnomeVillage", name = "Fruit: Tree Gnome Village", description = "", position = 9, section = patches)
+	@ConfigItem(keyName = "fruitTreeGnomeVillage", name = "fruitTreeGnomeVillage", description = "", hidden = true)
 	default boolean fruitTreeGnomeVillage()
 	{
 		return true;
 	}
 
-	@ConfigItem(keyName = "fruitCatherby", name = "Fruit: Catherby", description = "", position = 10, section = patches)
+	@ConfigItem(keyName = "fruitCatherby", name = "fruitCatherby", description = "", hidden = true)
 	default boolean fruitCatherby()
 	{
 		return true;
 	}
 
-	@ConfigItem(keyName = "fruitBrimhaven", name = "Fruit: Brimhaven", description = "", position = 11, section = patches)
+	@ConfigItem(keyName = "fruitBrimhaven", name = "fruitBrimhaven", description = "", hidden = true)
 	default boolean fruitBrimhaven()
 	{
 		return true;
 	}
 
-	@ConfigItem(keyName = "fruitKastori", name = "Fruit: Kastori", description = "Children of the Sun", position = 12, section = patches)
+	@ConfigItem(keyName = "fruitKastori", name = "fruitKastori", description = "", hidden = true)
 	default boolean fruitKastori()
 	{
 		return true;
 	}
 
-	@ConfigItem(keyName = "fruitLletya", name = "Fruit: Lletya", description = "Mourning's End Part I (partial)", position = 13, section = patches)
+	@ConfigItem(keyName = "fruitLletya", name = "fruitLletya", description = "", hidden = true)
 	default boolean fruitLletya()
 	{
 		return true;
 	}
 
-	@ConfigItem(keyName = "calquatTaiBwoWannai", name = "Calquat: Tai Bwo Wannai", description = "", position = 14, section = patches)
+	@ConfigItem(keyName = "calquatTaiBwoWannai", name = "calquatTaiBwoWannai", description = "", hidden = true)
 	default boolean calquatTaiBwoWannai()
 	{
 		return true;
 	}
 
-	@ConfigItem(keyName = "calquatKastori", name = "Calquat: Kastori", description = "Children of the Sun", position = 15, section = patches)
+	@ConfigItem(keyName = "calquatKastori", name = "calquatKastori", description = "", hidden = true)
 	default boolean calquatKastori()
 	{
 		return true;
 	}
 
-	@ConfigItem(keyName = "calquatSummerShore", name = "Calquat: Summer Shore", description = "Troubled Tortugans (partial)", position = 16, section = patches)
+	@ConfigItem(keyName = "calquatSummerShore", name = "calquatSummerShore", description = "", hidden = true)
 	default boolean calquatSummerShore()
 	{
 		return true;
 	}
 
-	@ConfigItem(keyName = "celastrusFarmingGuild", name = "Celastrus: Farming Guild", description = "85 Farming", position = 17, section = patches)
+	@ConfigItem(keyName = "celastrusFarmingGuild", name = "celastrusFarmingGuild", description = "", hidden = true)
 	default boolean celastrusFarmingGuild()
 	{
 		return true;
 	}
 
-	@ConfigItem(keyName = "redwoodFarmingGuild", name = "Redwood: Farming Guild", description = "90 Farming", position = 18, section = patches)
+	@ConfigItem(keyName = "redwoodFarmingGuild", name = "redwoodFarmingGuild", description = "", hidden = true)
 	default boolean redwoodFarmingGuild()
 	{
 		return true;
 	}
 
-	@ConfigItem(keyName = "hesporiFarmingGuild", name = "Hespori: Farming Guild", description = "65 Farming; seeds come from seed packs",
-		position = 19, section = patches)
+	@ConfigItem(keyName = "hesporiFarmingGuild", name = "hesporiFarmingGuild", description = "", hidden = true)
 	default boolean hesporiFarmingGuild()
 	{
 		return true;
 	}
 
-	@ConfigItem(keyName = "hardwoodLocusOasis", name = "Hardwood: Locus Oasis",
-		description = "The Ribbiting Tale of a Lily Pad Labour Dispute", position = 20, section = patches)
+	@ConfigItem(keyName = "hardwoodLocusOasis", name = "hardwoodLocusOasis", description = "", hidden = true)
 	default boolean hardwoodLocusOasis()
 	{
 		return true;
 	}
 
-	@ConfigItem(keyName = "hardwoodAnglersRetreat", name = "Hardwood: Anglers' Retreat", description = "51 Sailing",
-		position = 21, section = patches)
+	@ConfigItem(keyName = "hardwoodAnglersRetreat", name = "hardwoodAnglersRetreat", description = "", hidden = true)
 	default boolean hardwoodAnglersRetreat()
 	{
 		return true;
 	}
 
-	@ConfigItem(keyName = "hardwoodFossilEast", name = "Hardwood: Fossil Island east", description = "Bone Voyage", position = 22, section = patches)
+	@ConfigItem(keyName = "hardwoodFossilEast", name = "hardwoodFossilEast", description = "", hidden = true)
 	default boolean hardwoodFossilEast()
 	{
 		return true;
 	}
 
-	@ConfigItem(keyName = "hardwoodFossilMiddle", name = "Hardwood: Fossil Island middle", description = "Bone Voyage", position = 23, section = patches)
+	@ConfigItem(keyName = "hardwoodFossilMiddle", name = "hardwoodFossilMiddle", description = "", hidden = true)
 	default boolean hardwoodFossilMiddle()
 	{
 		return true;
 	}
 
-	@ConfigItem(keyName = "hardwoodFossilWest", name = "Hardwood: Fossil Island west", description = "Bone Voyage", position = 24, section = patches)
+	@ConfigItem(keyName = "hardwoodFossilWest", name = "hardwoodFossilWest", description = "", hidden = true)
 	default boolean hardwoodFossilWest()
 	{
 		return true;

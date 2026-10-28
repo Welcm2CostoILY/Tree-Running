@@ -31,7 +31,7 @@ public class PatchMatcherTest
 		crops.put(PatchType.CELASTRUS, CropType.CELASTRUS);
 		crops.put(PatchType.REDWOOD, CropType.REDWOOD);
 		crops.put(PatchType.HESPORI, CropType.HESPORI);
-		PlanSettings s = new PlanSettings(crops, EnumSet.allOf(PatchLocation.class), 99, 1, 3, true);
+		PlanSettings s = new PlanSettings(crops, EnumSet.allOf(PatchLocation.class), XpTable.xpForLevel(99), 1);
 		return RunPlanner.buildTasks(s, 99, Collections.emptyMap(), 0);
 	}
 

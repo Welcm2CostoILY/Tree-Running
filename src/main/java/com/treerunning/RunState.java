@@ -27,6 +27,9 @@ class RunState
 	/** Bank contents of tracked items (unnoted item ID → quantity) from the last time you opened it. */
 	Map<Integer, Integer> bank = new HashMap<>();
 	long bankSeenAt;
+	/** Farming Guild seed vault contents, from the last time you opened it. */
+	Map<Integer, Integer> vault = new HashMap<>();
+	long vaultSeenAt;
 
 	/** Gson leaves missing fields null when loading older saves. */
 	void fillDefaults()
@@ -46,6 +49,10 @@ class RunState
 		if (bank == null)
 		{
 			bank = new HashMap<>();
+		}
+		if (vault == null)
+		{
+			vault = new HashMap<>();
 		}
 	}
 }

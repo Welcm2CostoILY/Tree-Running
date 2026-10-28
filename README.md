@@ -1,13 +1,13 @@
 # Tree Running
 
-A RuneLite plugin for daily tree runs toward a Farming goal (99 by default).
+A RuneLite plugin for daily tree runs toward a Farming goal: a level (99 by default) or any XP total up to 200M.
 
-- **XP countdown**: runs, days and a goal date. It starts from your chosen crops and switches to the average of your real runs once you finish one.
-- **Checklist overlay**: the next stop, how to get there, its patches, and where to bank first.
-- **Supply tracker**: seeds/saplings and protection payments needed for the runs you have left, against what's in your bank and inventory.
-- **Inventory plan**: what to carry for the whole run, what to withdraw for each leg, and where the bank stops go. It allows for the tool leprechaun only noting produce (not banking it).
-- **Exact patch tracking**: planting ticks off the patch you actually planted, in any order.
-- **Crop choices**: tree, fruit tree and hardwood dropdowns, and a checkbox for every patch (25 in all, including Anglers' Retreat and each Fossil Island patch).
+- **XP tab**: runs, days and a goal date. It starts from your chosen crops and switches to the average of your real runs once you finish one. All settings live here too.
+- **Run tab**: a "This run needs" box with the saplings and protection items for the patches due today, color-coded by patch type, then the checklist in route order with your bank stops.
+- **Supplies tab**: seeds/saplings and protection payments needed for the runs you have left, against your bank, the Farming Guild seed vault and your inventory, with the live OSRS Wiki GE price of each and the cost of what you're short.
+- **Checklist overlay**: the current stop, how to get there, and its patches and bank stops in order.
+- **Exact patch tracking**: planting ticks off the patch you actually planted, in any order. Opening your bank ticks the next bank stop.
+- **Route & patches**: a checkbox for every patch (25 in all, including Anglers' Retreat and each Fossil Island patch), and bank stops you can add at any stop, before or after its patches.
 
 Built and compiled against RuneLite 1.13.4.
 
@@ -23,9 +23,9 @@ From a terminal, `./gradlew runClient` (or `gradlew.bat runClient` on Windows) d
 
 ## First-time setup in game
 
-1. Open the plugin settings and pick your crops. Untick any patches you can't use.
-2. **Open your bank once.** That's how the supply tracker learns what you have. It updates every time you open the bank.
-3. Do your run. Planting a sapling ticks off the next patch of that type automatically.
+1. Open the **XP** tab and scroll to **Settings**. Pick your crops and your goal, untick any patches you can't use, and add bank stops where you restock.
+2. **Open your bank and the Farming Guild seed vault once.** That's how the supply tracker learns what you have. Each updates every time you open it.
+3. Do your run. Planting a sapling ticks off that patch, and opening your bank ticks the next bank stop.
 
 ## How it tracks things
 
@@ -35,14 +35,9 @@ From a terminal, `./gradlew runClient` (or `gradlew.bat runClient` on Windows) d
 - **Runs**: a run starts at your first plant and includes the check-health XP from the few minutes before it. It ends when every due patch is ticked, or when you press **Finish run**. Run XP is all Farming XP gained during the run.
 - **Long-growing patches**: hardwood (85.3 h for ironwood), redwood (106.7 h) and Hespori (32 h) are timed from when you planted them. They show "Ready in…" until they're grown.
 - **XP countdown**: it averages your last 5 runs by default (setting: *Average over last N runs*). Before you've finished a run, it uses the plan.
-- **Saved data**: progress, run history and the bank count are saved per account in your RuneLite profile.
-
-## Inventory plan
-
-- Payments are planned **noted** and carried for the whole run. Gardeners accept noted payments.
-- Teleport items the route needs (Pendant of Ates, teleport crystal, digsite pendant) are added automatically. The *Always-carried slots* setting covers your own items: spade, coins, house teleport, and so on.
-- With **Pick fruit** on, 6 slots stay free to pick a tree, plus one slot per kind of noted produce. The leprechaun notes produce but doesn't bank it, so the noted stacks stay in your inventory.
-- Saplings take one slot each. When the next stop won't fit, the plan adds a bank stop. It uses the nearest bank to that stop, or Ring of dueling → Castle Wars from your house.
+- **Bank stops**: opening your bank during a run ticks the next bank stop, but only when a bank stop is the next thing on the route. You can always tick it by hand.
+- **Prices**: the OSRS Wiki's live prices, which RuneLite downloads and refreshes itself. Hespori seeds can't be traded, so they show "–".
+- **Saved data**: progress, run history and the bank and seed vault counts are saved per account in your RuneLite profile. Settings and bank stops are saved in your RuneLite settings.
 
 ## Preview
 
@@ -50,7 +45,7 @@ From a terminal, `./gradlew runClient` (or `gradlew.bat runClient` on Windows) d
 
 ## For development
 
-- `./gradlew test`: unit tests for the planner (XP table, run projection, supplies, inventory plan) and patch matching.
+- `./gradlew test`: unit tests for the planner (XP table, run projection, supplies and prices, route order with bank stops, run needs) and patch matching.
 - `./gradlew panelSnapshot`: renders the side panel tabs to `build/snapshots/` without starting the client.
 - `./gradlew exportPreviewData`: regenerates the data the preview uses.
 

@@ -92,8 +92,8 @@ public class PatchMatcherTest
 		Set<String> done = new HashSet<>();
 		done.add(RunTask.keyFor(PatchLocation.TREE_FALADOR, 0));
 		PatchMatcher.Match m = PatchMatcher.match(tasks(), done, PatchType.TREE, FALADOR_REGION, Collections.emptySet());
-		// Falador is done, so it falls back to the next tree patch in route order.
-		assertEquals(PatchLocation.TREE_FARMING_GUILD, m.getTask().getLocation());
+		// You're at Falador and Falador is done, so it must not tick some other tree patch far away.
+		assertNull(m);
 	}
 
 	@Test

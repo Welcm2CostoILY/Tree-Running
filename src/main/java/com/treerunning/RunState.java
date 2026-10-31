@@ -1,5 +1,6 @@
 package com.treerunning;
 
+import com.treerunning.core.RunRecord;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -13,17 +14,25 @@ import java.util.Set;
  */
 class RunState
 {
-	/** True between the first plant of a run and finishing it. */
+	/** True from the first patch of a run until you press Finish run. */
 	boolean active;
 	/** Farming XP at the start of the current run. */
 	int startXp;
 	long startedAt;
-	/** Task keys planted on the current run. */
+	/** Patches and bank stops ticked on the current run. */
 	Set<String> done = new HashSet<>();
-	/** When long-growing patches (hardwood, redwood, Hespori) were last planted. */
+	/** When each patch was ticked on the current run. Growth timers start from these on Finish run. */
+	Map<String, Long> tickedAt = new HashMap<>();
+	/** When the last patch of the current run was ticked. */
+	long lastTickAt;
+	/** Farming XP shortly after the last patch (covers planting and payments after a check-health). */
+	int runLastXp;
+	/** When long-growing patches (hardwood, redwood, Hespori) were last planted, from finished runs. */
 	Map<String, Long> plantedAt = new HashMap<>();
-	/** XP gained on each completed run, oldest first. */
-	List<Integer> runXp = new ArrayList<>();
+	/** Finished runs, oldest first. */
+	List<RunRecord> runs = new ArrayList<>();
+	/** XP of finished runs saved by older versions. Moved into runs on load. */
+	List<Integer> runXp;
 	/** Bank contents of tracked items (unnoted item ID → quantity) from the last time you opened it. */
 	Map<Integer, Integer> bank = new HashMap<>();
 	long bankSeenAt;
@@ -42,9 +51,24 @@ class RunState
 		{
 			plantedAt = new HashMap<>();
 		}
-		if (runXp == null)
+		if (tickedAt == null)
 		{
-			runXp = new ArrayList<>();
+			tickedAt = new HashMap<>();
+		}
+		if (runs == null)
+		{
+			runs = new ArrayList<>();
+		}
+		if (runXp != null)
+		{
+			for (Integer xp : runXp)
+			{
+				if (xp != null)
+				{
+					runs.add(new RunRecord(0, xp, -1));
+				}
+			}
+			runXp = null;
 		}
 		if (bank == null)
 		{

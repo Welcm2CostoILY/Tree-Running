@@ -81,8 +81,18 @@ public final class PatchMatcher
 			}
 		}
 
-		// Planted something on a patch the plugin can't place (e.g. a patch you switched
-		// off in settings). Fall back to route order, but only among due patches.
+		// You're at a stop that has this kind of patch, but it's already ticked (usually by
+		// its check-health a moment ago). Don't guess another stop.
+		for (RunTask task : tasks)
+		{
+			if (task.getLocation().getPatchType() == type && task.getLocation().isInRegion(region))
+			{
+				return null;
+			}
+		}
+
+		// Planted somewhere the plugin can't place. Fall back to route order, but only
+		// among due patches.
 		for (RunTask task : tasks)
 		{
 			if (open(task, done, type) && task.isDue())

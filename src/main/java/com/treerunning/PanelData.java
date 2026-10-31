@@ -3,10 +3,13 @@ package com.treerunning;
 import com.treerunning.core.Route;
 import com.treerunning.core.RouteItem;
 import com.treerunning.core.RunNeeds;
+import com.treerunning.core.RunRecord;
 import com.treerunning.core.RunTask;
 import com.treerunning.core.SupplyCalculator;
+import com.treerunning.data.RouteStep;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -40,13 +43,24 @@ final class PanelData
 	Set<String> done = Collections.emptySet();
 	boolean runActive;
 	int runXpSoFar;
-	/** The patch the last planting ticked, or null. */
+	/** The patch the last tick came from, or null. */
 	String lastMatch;
 
 	List<RunNeeds.Line> needs = Collections.emptyList();
 	List<SupplyCalculator.SupplyLine> supplies = Collections.emptyList();
 	long bankSeenAt;
 	long vaultSeenAt;
+
+	/** Finished runs, oldest first. */
+	List<RunRecord> runs = Collections.emptyList();
+	/** The travel note shown for each stop (yours, or the built-in one). */
+	Map<RouteStep, String> travel = Collections.emptyMap();
+
+	String travelNote(RouteStep step)
+	{
+		String note = travel.get(step);
+		return note != null ? note : step.getTravel();
+	}
 
 	int xpRemaining()
 	{

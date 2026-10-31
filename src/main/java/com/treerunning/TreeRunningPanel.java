@@ -2,7 +2,9 @@ package com.treerunning;
 
 import com.treerunning.core.BankStop;
 import com.treerunning.core.RouteItem;
+import com.treerunning.core.RouteOrder;
 import com.treerunning.core.RunNeeds;
+import com.treerunning.core.RunRecord;
 import com.treerunning.core.RunTask;
 import com.treerunning.core.SupplyCalculator;
 import com.treerunning.core.XpTable;
@@ -22,6 +24,8 @@ import java.awt.event.FocusEvent;
 import java.text.NumberFormat;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
+import java.time.Instant;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.List;
@@ -52,6 +56,7 @@ import javax.swing.event.DocumentListener;
 import net.runelite.client.ui.ColorScheme;
 import net.runelite.client.ui.FontManager;
 import net.runelite.client.ui.PluginPanel;
+import net.runelite.client.util.LinkBrowser;
 
 /**
  * Side panel with three tabs: XP (progress and all settings), Run and Supplies.
@@ -91,6 +96,10 @@ class TreeRunningPanel extends PluginPanel
 	private List<BankStop> bankStops = new ArrayList<>();
 	private final Timer bankSaveTimer;
 	private Predicate<PatchLocation> patchEnabled = location -> true;
+	private RouteOrder routeOrder = RouteOrder.defaults();
+	/** Travel notes the player typed, by stop. */
+	private Map<RouteStep, String> travelNotes = new EnumMap<>(RouteStep.class);
+	private final Timer travelSaveTimer;
 
 	TreeRunningPanel(TreeRunningPlugin plugin)
 	{
@@ -101,6 +110,8 @@ class TreeRunningPanel extends PluginPanel
 
 		bankSaveTimer = new Timer(500, e -> saveBankStops());
 		bankSaveTimer.setRepeats(false);
+		travelSaveTimer = new Timer(600, e -> saveTravelNotes());
+		travelSaveTimer.setRepeats(false);
 
 		JPanel xpTab = column();
 		xpTab.add(statsPanel);
@@ -194,10 +205,49 @@ class TreeRunningPanel extends PluginPanel
 		{
 			statsPanel.add(row("This run so far", NUM.format(d.runXpSoFar)));
 		}
-		JButton clear = button("Clear run history");
+
+		statsPanel.add(Box.createVerticalStrut(6));
+		statsPanel.add(heading("Run history"));
+		if (d.runs.isEmpty())
+		{
+			statsPanel.add(text("No finished runs yet. Press Finish run at the end of a run to save it here.", MUTED));
+			return;
+		}
+		DateTimeFormatter when = DateTimeFormatter.ofPattern("MMM d, HH:mm");
+		// Newest first; the index is the run's place in the saved list.
+		int shown = 0;
+		for (int i = d.runs.size() - 1; i >= 0 && shown < 30; i--, shown++)
+		{
+			RunRecord run = d.runs.get(i);
+			int index = i;
+			String date = run.endedAt > 0
+				? Instant.ofEpochMilli(run.endedAt).atZone(ZoneId.systemDefault()).format(when)
+				: "Earlier run";
+			statsPanel.add(historyRow(date, NUM.format(run.xp) + " XP" + (run.patches > 0 ? " · " + run.patches : ""),
+				() -> plugin.deleteRun(index)));
+		}
+		if (d.runs.size() > 30)
+		{
+			statsPanel.add(text((d.runs.size() - 30) + " older runs not shown.", MUTED));
+		}
+		JButton clear = button("Clear all history");
 		clear.addActionListener(e -> plugin.clearHistory());
 		statsPanel.add(Box.createVerticalStrut(4));
 		statsPanel.add(clear);
+	}
+
+	private static JPanel historyRow(String date, String value, Runnable delete)
+	{
+		JPanel panel = new JPanel(new BorderLayout(4, 0));
+		panel.setOpaque(false);
+		panel.add(small(date, ColorScheme.LIGHT_GRAY_COLOR), BorderLayout.WEST);
+		panel.add(number(value), BorderLayout.CENTER);
+		JButton remove = tinyButton("✕", "Delete this run");
+		remove.addActionListener(e -> delete.run());
+		panel.add(remove, BorderLayout.EAST);
+		panel.setMaximumSize(new Dimension(Integer.MAX_VALUE, 20));
+		panel.setAlignmentX(LEFT_ALIGNMENT);
+		return panel;
 	}
 
 	// ------------------------------------------------------------------ XP tab: settings
@@ -205,15 +255,20 @@ class TreeRunningPanel extends PluginPanel
 	/** Builds the settings from the saved values. Called once at startup, on the Swing thread. */
 	void loadSettings()
 	{
-		loadSettings(plugin.getConfig(), plugin.getBankStops(), plugin::isPatchEnabled);
+		loadSettings(plugin.getConfig(), plugin.getBankStops(), plugin.getRouteOrder(), plugin.getTravelNotes(),
+			plugin::isPatchEnabled);
 	}
 
-	void loadSettings(TreeRunningConfig config, List<BankStop> stops, Predicate<PatchLocation> patchEnabled)
+	void loadSettings(TreeRunningConfig config, List<BankStop> stops, RouteOrder order, Map<RouteStep, String> travel,
+		Predicate<PatchLocation> patchEnabled)
 	{
 		loading = true;
 		try
 		{
 			this.patchEnabled = patchEnabled;
+			this.routeOrder = order;
+			this.travelNotes = new EnumMap<>(RouteStep.class);
+			this.travelNotes.putAll(travel);
 			buildSettings(config);
 			bankStops = new ArrayList<>(stops);
 			buildRoute();
@@ -298,10 +353,26 @@ class TreeRunningPanel extends PluginPanel
 		settingsPanel.add(section("Overlay"));
 		settingsPanel.add(checkField("Show checklist overlay", config.showOverlay(), "showOverlay"));
 		settingsPanel.add(checkField("Only during a run", config.overlayOnlyDuringRun(), "overlayOnlyDuringRun"));
+		settingsPanel.add(checkField("Highlight patches in game", config.highlightPatches(), "highlightPatches"));
+		settingsPanel.add(checkField("Hint arrow to next patch", config.hintArrow(), "hintArrow"));
+		settingsPanel.add(text("Highlights show once a patch is loaded nearby. The next patch is bright green.", MUTED));
 
 		settingsPanel.add(section("Route & patches"));
-		settingsPanel.add(text("Untick patches you don't use. Add a bank stop at any stop and type where you bank.", MUTED));
+		settingsPanel.add(text("▲▼ move a stop or a patch. The line under each stop is the travel note shown in the run; "
+			+ "type your own. Untick patches you don't use, and add bank stops where you restock.", MUTED));
 		settingsPanel.add(routePanel);
+
+		settingsPanel.add(section("Debug"));
+		settingsPanel.add(checkField("Debug log", config.debugLog(), "debugLog"));
+		settingsPanel.add(text("Writes what the tracker sees to a file in .runelite/tree-running. Turn it on for a few runs "
+			+ "if ticking misses a patch, then send the files.", MUTED));
+		JButton open = button("Open log folder");
+		open.addActionListener(e ->
+		{
+			DebugLog.FOLDER.mkdirs();
+			LinkBrowser.open(DebugLog.FOLDER.getAbsolutePath());
+		});
+		settingsPanel.add(open);
 	}
 
 	/** The route editor: every stop, its patches, and its bank stops before or after them. */
@@ -309,16 +380,11 @@ class TreeRunningPanel extends PluginPanel
 	{
 		routePanel.removeAll();
 		routePanel.setBorder(new EmptyBorder(0, 0, 0, 0));
-		for (RouteStep step : RouteStep.values())
+		List<RouteStep> stops = routeOrder.getStops();
+		for (int s = 0; s < stops.size(); s++)
 		{
-			List<PatchLocation> locations = new ArrayList<>();
-			for (PatchLocation location : PatchLocation.values())
-			{
-				if (location.getStep() == step)
-				{
-					locations.add(location);
-				}
-			}
+			RouteStep step = stops.get(s);
+			List<PatchLocation> locations = routeOrder.getPatches(step);
 			if (locations.isEmpty())
 			{
 				continue;
@@ -327,11 +393,15 @@ class TreeRunningPanel extends PluginPanel
 			JLabel head = heading(step.getDisplayName());
 			head.setForeground(ColorScheme.BRAND_ORANGE);
 			routePanel.add(Box.createVerticalStrut(6));
-			routePanel.add(head);
+			routePanel.add(withArrows(head, s > 0, s < stops.size() - 1,
+				() -> moveRoute(routeOrder.moveStop(step, -1)), () -> moveRoute(routeOrder.moveStop(step, 1)),
+				"stop"));
+			routePanel.add(travelField(step));
 
 			addBankEditors(step, true);
-			for (PatchLocation location : locations)
+			for (int p = 0; p < locations.size(); p++)
 			{
+				PatchLocation location = locations.get(p);
 				String label = location.getPatchType().getDisplayName()
 					+ (location.getPatchName() != null ? " (" + location.getPatchName() + ")" : "");
 				JCheckBox box = checkBox(label, patchEnabled.test(location));
@@ -346,7 +416,9 @@ class TreeRunningPanel extends PluginPanel
 						plugin.setPatchEnabled(location, box.isSelected());
 					}
 				});
-				routePanel.add(box);
+				routePanel.add(locations.size() < 2 ? box : withArrows(box, p > 0, p < locations.size() - 1,
+					() -> moveRoute(routeOrder.movePatch(location, -1)), () -> moveRoute(routeOrder.movePatch(location, 1)),
+					"patch"));
 			}
 			addBankEditors(step, false);
 
@@ -363,6 +435,98 @@ class TreeRunningPanel extends PluginPanel
 				routePanel.repaint();
 			});
 			routePanel.add(add);
+		}
+	}
+
+	private void moveRoute(RouteOrder order)
+	{
+		routeOrder = order;
+		plugin.saveRouteOrder(order);
+		buildRoute();
+		routePanel.revalidate();
+		routePanel.repaint();
+	}
+
+	/** A row with ▲▼ buttons on the right. */
+	private static JComponent withArrows(JComponent content, boolean canUp, boolean canDown, Runnable up, Runnable down,
+		String what)
+	{
+		JPanel row = new JPanel(new BorderLayout(2, 0));
+		row.setOpaque(false);
+		content.setAlignmentX(LEFT_ALIGNMENT);
+		row.add(content, BorderLayout.CENTER);
+		JPanel arrows = new JPanel(new GridLayout(1, 2, 1, 0));
+		arrows.setOpaque(false);
+		JButton upButton = tinyButton("▲", "Move this " + what + " up");
+		upButton.setEnabled(canUp);
+		upButton.addActionListener(e -> up.run());
+		JButton downButton = tinyButton("▼", "Move this " + what + " down");
+		downButton.setEnabled(canDown);
+		downButton.addActionListener(e -> down.run());
+		arrows.add(upButton);
+		arrows.add(downButton);
+		row.add(arrows, BorderLayout.EAST);
+		row.setMaximumSize(new Dimension(Integer.MAX_VALUE, Math.max(22, content.getPreferredSize().height)));
+		row.setAlignmentX(LEFT_ALIGNMENT);
+		return row;
+	}
+
+	/** The travel note for a stop, editable. Empty hides it. */
+	private JComponent travelField(RouteStep step)
+	{
+		String current = travelNotes.containsKey(step) ? travelNotes.get(step) : step.getTravel();
+		JTextField field = new JTextField(current);
+		styleInput(field);
+		field.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
+		field.setToolTipText("How you get here. Built-in: " + step.getTravel());
+		field.getDocument().addDocumentListener(new DocumentListener()
+		{
+			private void changed()
+			{
+				String text = field.getText();
+				if (text.equals(step.getTravel()))
+				{
+					travelNotes.remove(step);
+				}
+				else
+				{
+					travelNotes.put(step, text);
+				}
+				if (!loading)
+				{
+					travelSaveTimer.restart();
+				}
+			}
+
+			@Override
+			public void insertUpdate(DocumentEvent e)
+			{
+				changed();
+			}
+
+			@Override
+			public void removeUpdate(DocumentEvent e)
+			{
+				changed();
+			}
+
+			@Override
+			public void changedUpdate(DocumentEvent e)
+			{
+				changed();
+			}
+		});
+		field.setMaximumSize(new Dimension(Integer.MAX_VALUE, 24));
+		field.setAlignmentX(LEFT_ALIGNMENT);
+		return field;
+	}
+
+	private void saveTravelNotes()
+	{
+		if (!loading)
+		{
+			travelSaveTimer.stop();
+			plugin.saveTravelNotes(travelNotes);
 		}
 	}
 
@@ -420,10 +584,7 @@ class TreeRunningPanel extends PluginPanel
 				changed();
 			}
 		});
-		JButton remove = new JButton("✕");
-		remove.setToolTipText("Remove this bank stop");
-		remove.setFocusPainted(false);
-		remove.setMargin(new Insets(0, 4, 0, 4));
+		JButton remove = tinyButton("✕", "Remove this bank stop");
 		remove.addActionListener(e ->
 		{
 			bankStops.remove(stop);
@@ -503,10 +664,16 @@ class TreeRunningPanel extends PluginPanel
 		buttons.setMaximumSize(new Dimension(Integer.MAX_VALUE, 26));
 		buttons.setAlignmentX(LEFT_ALIGNMENT);
 		runTab.add(buttons);
-		runTab.add(text("Planting ticks off the exact patch you planted, in any order. Opening your bank ticks the next bank stop.", MUTED));
+		runTab.add(text("Patches tick when you check health or plant, in any order. Opening your bank ticks the next "
+			+ "bank stop. Growth timers and run XP are saved when you press Finish run.", MUTED));
 		if (d.lastMatch != null)
 		{
-			runTab.add(text("Last planted: " + d.lastMatch, GOOD));
+			runTab.add(text("Last ticked: " + d.lastMatch, GOOD));
+		}
+		if (d.runActive && d.dueCount() > 0 && d.nextItem() == null)
+		{
+			runTab.add(Box.createVerticalStrut(4));
+			runTab.add(doneBox(d));
 		}
 
 		if (!d.needs.isEmpty())
@@ -525,7 +692,11 @@ class TreeRunningPanel extends PluginPanel
 				location.setForeground(ColorScheme.BRAND_ORANGE);
 				runTab.add(Box.createVerticalStrut(6));
 				runTab.add(location);
-				runTab.add(text(currentStep.getTravel(), MUTED));
+				String travel = d.travelNote(currentStep);
+				if (!travel.trim().isEmpty())
+				{
+					runTab.add(text(travel, MUTED));
+				}
 			}
 
 			String key = item.getKey();
@@ -543,7 +714,8 @@ class TreeRunningPanel extends PluginPanel
 					? " (" + task.getNote() + ")" : "";
 				box = checkBox(patchLabel(task) + note, d.done.contains(key));
 				box.setForeground(task.isDue() ? Color.WHITE : MUTED);
-				box.setEnabled(task.isDue());
+				// Due patches can always be ticked or unticked; a ticked one can always be unticked.
+				box.setEnabled(task.isDue() || d.done.contains(key));
 			}
 			box.addActionListener(e -> plugin.toggleTask(key));
 			runTab.add(box);
@@ -576,7 +748,10 @@ class TreeRunningPanel extends PluginPanel
 		c.gridwidth = 3;
 		c.weightx = 1;
 		box.add(title, c);
-		JLabel total = small(RunNeeds.totalSaplings(needs) + " saplings", MUTED);
+		int shortCount = RunNeeds.shortCount(needs);
+		JLabel total = small(shortCount > 0 ? shortCount + " short" : RunNeeds.totalSaplings(needs) + " to plant",
+			shortCount > 0 ? BAD : MUTED);
+		total.setToolTipText("Have / need, counting your inventory");
 		total.setHorizontalAlignment(SwingConstants.RIGHT);
 		c.gridx = 3;
 		c.gridwidth = 1;
@@ -593,7 +768,7 @@ class TreeRunningPanel extends PluginPanel
 			c.gridx = 0;
 			c.weightx = 0;
 			c.insets = new Insets(1, 0, 0, 5);
-			box.add(number(String.valueOf(line.getSaplings())), c);
+			box.add(count(line.getSaplingsCarried(), line.getSaplings()), c);
 			c.gridx = 1;
 			c.weightx = 0.45;
 			box.add(small(cropName, color), c);
@@ -601,7 +776,7 @@ class TreeRunningPanel extends PluginPanel
 			c.weightx = 0;
 			if (crop.getPayment() != null)
 			{
-				box.add(number(NUM.format(line.getPayment())), c);
+				box.add(count(line.getPaymentCarried(), line.getPayment()), c);
 				c.gridx = 3;
 				c.weightx = 0.55;
 				c.insets = new Insets(1, 0, 0, 0);
@@ -616,6 +791,32 @@ class TreeRunningPanel extends PluginPanel
 				box.add(small("No payment", MUTED), c);
 			}
 		}
+		box.setMaximumSize(new Dimension(Integer.MAX_VALUE, box.getPreferredSize().height + 4));
+		return box;
+	}
+
+	/** "have/need" in red when you're short, or just the number when you have them all. */
+	private static JLabel count(int have, int need)
+	{
+		if (have >= need)
+		{
+			return number(NUM.format(need));
+		}
+		JLabel label = number(NUM.format(have) + "/" + NUM.format(need));
+		label.setForeground(BAD);
+		label.setToolTipText("You have " + have + " of " + need + " in your inventory");
+		return label;
+	}
+
+	private static JComponent doneBox(PanelData d)
+	{
+		JPanel box = column();
+		box.setBackground(new Color(0x23, 0x3A, 0x1F));
+		box.setBorder(BorderFactory.createCompoundBorder(
+			BorderFactory.createLineBorder(GOOD), new EmptyBorder(5, 6, 5, 6)));
+		box.add(heading("All " + d.dueCount() + " patches done"));
+		box.add(text("Press Finish run to save " + NUM.format(d.runXpSoFar) + " XP to your history and start the "
+			+ "growth timers. Unticked something by mistake? Tick it again first.", Color.WHITE));
 		box.setMaximumSize(new Dimension(Integer.MAX_VALUE, box.getPreferredSize().height + 4));
 		return box;
 	}
@@ -909,6 +1110,16 @@ class TreeRunningPanel extends PluginPanel
 		b.setFont(FontManager.getRunescapeSmallFont());
 		b.setFocusPainted(false);
 		b.setAlignmentX(LEFT_ALIGNMENT);
+		return b;
+	}
+
+	private static JButton tinyButton(String s, String tooltip)
+	{
+		JButton b = new JButton(s);
+		b.setFont(FontManager.getRunescapeSmallFont());
+		b.setFocusPainted(false);
+		b.setMargin(new Insets(0, 3, 0, 3));
+		b.setToolTipText(tooltip);
 		return b;
 	}
 

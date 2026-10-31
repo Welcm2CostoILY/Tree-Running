@@ -147,6 +147,42 @@ public interface TreeRunningConfig extends Config
 		return false;
 	}
 
+	@ConfigItem(keyName = "stopOrder", name = "Stop order", description = "", hidden = true)
+	default String stopOrder()
+	{
+		return "[]";
+	}
+
+	@ConfigItem(keyName = "patchOrder", name = "Patch order", description = "", hidden = true)
+	default String patchOrder()
+	{
+		return "{}";
+	}
+
+	@ConfigItem(keyName = "travelText", name = "Travel notes", description = "", hidden = true)
+	default String travelText()
+	{
+		return "{}";
+	}
+
+	@ConfigItem(keyName = "highlightPatches", name = "Highlight patches", description = "", hidden = true)
+	default boolean highlightPatches()
+	{
+		return true;
+	}
+
+	@ConfigItem(keyName = "hintArrow", name = "Hint arrow", description = "", hidden = true)
+	default boolean hintArrow()
+	{
+		return false;
+	}
+
+	@ConfigItem(keyName = "debugLog", name = "Debug log", description = "", hidden = true)
+	default boolean debugLog()
+	{
+		return false;
+	}
+
 	@ConfigItem(keyName = "bankStops", name = "Bank stops", description = "", hidden = true)
 	default String bankStops()
 	{

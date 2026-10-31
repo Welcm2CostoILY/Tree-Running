@@ -1,12 +1,15 @@
 package com.treerunning;
 
+import com.treerunning.core.ActionMatcher;
 import com.treerunning.core.BankStop;
 import com.treerunning.core.PatchMatcher;
 import com.treerunning.core.PlanSettings;
 import com.treerunning.core.Route;
 import com.treerunning.core.RouteItem;
+import com.treerunning.core.RouteOrder;
 import com.treerunning.core.RunNeeds;
 import com.treerunning.core.RunPlanner;
+import com.treerunning.core.RunRecord;
 import com.treerunning.core.RunTask;
 import com.treerunning.core.SupplyCalculator;
 import com.treerunning.core.XpProjection;
@@ -17,7 +20,6 @@ import com.treerunning.data.PatchType;
 import com.treerunning.data.RouteStep;
 import com.google.gson.Gson;
 import com.google.gson.JsonParseException;
-import com.google.gson.JsonSyntaxException;
 import com.google.gson.reflect.TypeToken;
 import com.google.inject.Provides;
 import java.util.ArrayDeque;
@@ -26,10 +28,10 @@ import java.util.Collections;
 import java.util.Deque;
 import java.util.EnumMap;
 import java.util.EnumSet;
-import java.util.LinkedHashSet;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -38,17 +40,21 @@ import javax.inject.Inject;
 import javax.swing.SwingUtilities;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Client;
+import net.runelite.api.GameObject;
 import net.runelite.api.GameState;
 import net.runelite.api.Item;
 import net.runelite.api.ItemContainer;
+import net.runelite.api.ObjectComposition;
+import net.runelite.api.Player;
 import net.runelite.api.Skill;
+import net.runelite.api.coords.WorldPoint;
+import net.runelite.api.events.GameObjectDespawned;
+import net.runelite.api.events.GameObjectSpawned;
 import net.runelite.api.events.GameStateChanged;
 import net.runelite.api.events.GameTick;
 import net.runelite.api.events.ItemContainerChanged;
 import net.runelite.api.events.StatChanged;
 import net.runelite.api.events.VarbitChanged;
-import net.runelite.api.Player;
-import net.runelite.api.coords.WorldPoint;
 import net.runelite.api.gameval.InventoryID;
 import net.runelite.client.callback.ClientThread;
 import net.runelite.client.config.ConfigManager;
@@ -72,12 +78,14 @@ import net.runelite.client.util.ImageUtil;
 public class TreeRunningPlugin extends Plugin
 {
 	private static final String STATE_KEY = "state";
-	/** XP gained within this window before the first plant counts toward the run (check-health XP). */
-	private static final int RUN_START_LOOKBACK_TICKS = 300;
+	/** XP this many ticks before the first patch counts toward the run (a check-health just before planting). */
+	private static final int RUN_START_LOOKBACK_TICKS = 20;
 	/** A sapling leaving the inventory counts as planted if Farming XP arrives within this many ticks. */
 	private static final int PLANT_MATCH_TICKS = 2;
 	/** A patch's varbit changing within this many ticks of a planting ties the planting to that patch. */
 	private static final int PATCH_MATCH_TICKS = 3;
+	/** Farming XP up to this long after the last patch still counts toward the run (planting, paying). */
+	private static final long RUN_XP_TAIL_MS = 5 * 60_000L;
 
 	@Inject
 	private Client client;
@@ -104,15 +112,22 @@ public class TreeRunningPlugin extends Plugin
 	private TreeRunningOverlay overlay;
 
 	@Inject
+	private PatchHighlightOverlay highlightOverlay;
+
+	@Inject
 	private Gson gson;
 
 	private TreeRunningPanel panel;
 	private NavigationButton navButton;
+	private final DebugLog debug = new DebugLog();
 
 	private RunState state = new RunState();
 	/** Bank stops the player added to their route (saved in the plugin settings). */
 	private volatile List<BankStop> bankStops = Collections.emptyList();
-	/** What the last planting ticked, shown in the Run tab so you can check it. */
+	private volatile RouteOrder routeOrder = RouteOrder.defaults();
+	/** Travel notes the player edited, by stop. Stops not in here use the built-in note. */
+	private volatile Map<RouteStep, String> travelNotes = Collections.emptyMap();
+	/** What the last tick was, shown in the Run tab so you can check it. */
 	private String lastMatch;
 	private volatile PanelData data = PanelData.EMPTY;
 
@@ -125,23 +140,18 @@ public class TreeRunningPlugin extends Plugin
 	private int lastXp = -1;
 	private int lastXpGainTick = -100;
 	private final Deque<int[]> recentXpGains = new ArrayDeque<>(); // {tick, delta}
+	/** Farming XP drops still waiting to be matched to a patch change. */
+	private final List<Integer> pendingActions = new ArrayList<>();
 	private final List<int[]> pendingPlants = new ArrayList<>(); // {tick, itemId}
 	/** Varbit ID → patches that use it (the same varbit is reused in different regions). */
 	private final Map<Integer, List<PatchLocation>> patchesByVarbit = new HashMap<>();
-	/** Patches whose state changed recently while you were standing by them. */
-	private final Deque<PatchChange> recentPatchChanges = new ArrayDeque<>();
-
-	private static final class PatchChange
-	{
-		final int tick;
-		final PatchLocation location;
-
-		PatchChange(int tick, PatchLocation location)
-		{
-			this.tick = tick;
-			this.location = location;
-		}
-	}
+	/** Patch changes in your region over the last few ticks. */
+	private final Deque<ActionMatcher.Change> recentPatchChanges = new ArrayDeque<>();
+	private final Map<Integer, Integer> lastVarbitValues = new HashMap<>();
+	/** Patch objects in the loaded scene, for highlighting. */
+	private final Map<PatchLocation, GameObject> patchObjects = new EnumMap<>(PatchLocation.class);
+	/** Where this plugin last put the hint arrow, so it only clears its own. */
+	private WorldPoint ourHintArrow;
 
 	@Provides
 	TreeRunningConfig provideConfig(ConfigManager configManager)
@@ -173,7 +183,10 @@ public class TreeRunningPlugin extends Plugin
 			patchesByVarbit.computeIfAbsent(location.getVarbit(), v -> new ArrayList<>()).add(location);
 		}
 
+		debug.setEnabled(config.debugLog());
 		loadBankStops();
+		loadRouteOrder();
+		loadTravelNotes();
 		panel = new TreeRunningPanel(this);
 		SwingUtilities.invokeLater(panel::loadSettings);
 		navButton = NavigationButton.builder()
@@ -184,6 +197,7 @@ public class TreeRunningPlugin extends Plugin
 			.build();
 		clientToolbar.addNavigation(navButton);
 		overlayManager.add(overlay);
+		overlayManager.add(highlightOverlay);
 
 		clientThread.invokeLater(() ->
 		{
@@ -197,15 +211,21 @@ public class TreeRunningPlugin extends Plugin
 	protected void shutDown()
 	{
 		overlayManager.remove(overlay);
+		overlayManager.remove(highlightOverlay);
 		clientToolbar.removeNavigation(navButton);
+		clientThread.invokeLater(this::clearOurHintArrow);
 		plantedItemToCrop.clear();
 		trackedItems.clear();
 		pendingPlants.clear();
+		pendingActions.clear();
 		recentXpGains.clear();
 		patchesByVarbit.clear();
 		recentPatchChanges.clear();
+		lastVarbitValues.clear();
+		patchObjects.clear();
 		inventory = new HashMap<>();
 		data = PanelData.EMPTY;
+		debug.shutDown();
 	}
 
 	PanelData getData()
@@ -216,6 +236,12 @@ public class TreeRunningPlugin extends Plugin
 	TreeRunningConfig getConfig()
 	{
 		return config;
+	}
+
+	/** Patch objects in the scene; read by the highlight overlay on the client thread. */
+	Map<PatchLocation, GameObject> getPatchObjects()
+	{
+		return patchObjects;
 	}
 
 	// ------------------------------------------------------------------ events
@@ -230,6 +256,10 @@ public class TreeRunningPlugin extends Plugin
 	@Subscribe
 	public void onGameStateChanged(GameStateChanged event)
 	{
+		if (event.getGameState() == GameState.LOADING || event.getGameState() == GameState.LOGIN_SCREEN)
+		{
+			patchObjects.clear();
+		}
 		if (event.getGameState() == GameState.LOGGED_IN)
 		{
 			lastXp = client.getSkillExperience(Skill.FARMING);
@@ -240,14 +270,35 @@ public class TreeRunningPlugin extends Plugin
 	@Subscribe
 	public void onConfigChanged(ConfigChanged event)
 	{
-		if (TreeRunningConfig.GROUP.equals(event.getGroup()))
+		if (!TreeRunningConfig.GROUP.equals(event.getGroup()))
 		{
-			if ("bankStops".equals(event.getKey()))
-			{
-				loadBankStops();
-			}
-			clientThread.invokeLater(this::refresh);
+			return;
 		}
+		switch (event.getKey())
+		{
+			case "bankStops":
+				loadBankStops();
+				break;
+			case "stopOrder":
+			case "patchOrder":
+				loadRouteOrder();
+				break;
+			case "travelText":
+				loadTravelNotes();
+				break;
+			case "debugLog":
+				debug.setEnabled(config.debugLog());
+				break;
+			case "hintArrow":
+				if (!config.hintArrow())
+				{
+					clientThread.invokeLater(this::clearOurHintArrow);
+				}
+				break;
+			default:
+				break;
+		}
+		clientThread.invokeLater(this::refresh);
 	}
 
 	@Subscribe
@@ -262,11 +313,20 @@ public class TreeRunningPlugin extends Plugin
 		if (lastXp >= 0 && xp > lastXp)
 		{
 			int tick = client.getTickCount();
+			int delta = xp - lastXp;
 			lastXpGainTick = tick;
-			recentXpGains.addLast(new int[]{tick, xp - lastXp});
+			recentXpGains.addLast(new int[]{tick, delta});
 			while (!recentXpGains.isEmpty() && tick - recentXpGains.peekFirst()[0] > RUN_START_LOOKBACK_TICKS)
 			{
 				recentXpGains.removeFirst();
+			}
+			pendingActions.add(tick);
+			debug.log(tick, "XP +" + delta + " (total " + xp + ") at " + where());
+
+			if (state.active && System.currentTimeMillis() - state.lastTickAt < RUN_XP_TAIL_MS)
+			{
+				state.runLastXp = xp;
+				saveState();
 			}
 		}
 		lastXp = xp;
@@ -284,15 +344,19 @@ public class TreeRunningPlugin extends Plugin
 			for (Map.Entry<Integer, Integer> entry : inventory.entrySet())
 			{
 				int id = entry.getKey();
-				if (!plantedItemToCrop.containsKey(id))
+				CropType crop = plantedItemToCrop.get(id);
+				if (crop == null)
 				{
 					continue;
 				}
-				int before = entry.getValue();
-				int after = now.getOrDefault(id, 0);
-				for (int i = 0; i < before - after; i++)
+				int gone = entry.getValue() - now.getOrDefault(id, 0);
+				for (int i = 0; i < gone; i++)
 				{
 					pendingPlants.add(new int[]{tick, id});
+				}
+				if (gone > 0)
+				{
+					debug.log(tick, gone + "x " + crop.getPlantedItem().getName() + " left the inventory at " + where());
 				}
 			}
 			inventory = now;
@@ -302,6 +366,7 @@ public class TreeRunningPlugin extends Plugin
 		{
 			state.bank = countTracked(event.getItemContainer());
 			state.bankSeenAt = System.currentTimeMillis();
+			debug.log(client.getTickCount(), "Bank opened at " + where());
 			tickBankStopIfNext();
 			saveState();
 			refresh();
@@ -326,39 +391,83 @@ public class TreeRunningPlugin extends Plugin
 
 		int region = currentRegion();
 		int tick = client.getTickCount();
+		Integer old = lastVarbitValues.put(event.getVarbitId(), event.getValue());
+		List<String> here = new ArrayList<>();
 		for (PatchLocation location : patches)
 		{
 			if (location.isInRegion(region))
 			{
-				recentPatchChanges.addLast(new PatchChange(tick, location));
+				recentPatchChanges.addLast(new ActionMatcher.Change(tick, location));
+				here.add(location.name());
 			}
 		}
-		while (!recentPatchChanges.isEmpty() && tick - recentPatchChanges.peekFirst().tick > 2 * PATCH_MATCH_TICKS)
+		while (!recentPatchChanges.isEmpty() && tick - recentPatchChanges.peekFirst().tick() > 2 * PATCH_MATCH_TICKS)
 		{
 			recentPatchChanges.removeFirst();
 		}
+		debug.log(tick, "Varbit " + event.getVarbitId() + ": " + old + " -> " + event.getValue()
+			+ " in region " + region + (here.isEmpty() ? " (not a tracked patch here)" : " = " + here));
+	}
+
+	@Subscribe
+	public void onGameObjectSpawned(GameObjectSpawned event)
+	{
+		GameObject object = event.getGameObject();
+		ObjectComposition def = client.getObjectDefinition(object.getId());
+		if (def == null)
+		{
+			return;
+		}
+		List<PatchLocation> patches = patchesByVarbit.get(def.getVarbitId());
+		if (patches == null || object.getWorldLocation() == null)
+		{
+			return;
+		}
+		int region = object.getWorldLocation().getRegionID();
+		for (PatchLocation location : patches)
+		{
+			if (location.isInRegion(region))
+			{
+				patchObjects.put(location, object);
+			}
+		}
+	}
+
+	@Subscribe
+	public void onGameObjectDespawned(GameObjectDespawned event)
+	{
+		patchObjects.values().removeIf(o -> o == event.getGameObject());
 	}
 
 	@Subscribe
 	public void onGameTick(GameTick event)
 	{
-		if (pendingPlants.isEmpty())
-		{
-			return;
-		}
-
 		int tick = client.getTickCount();
 		boolean changed = false;
+
+		// Farming XP that arrived with a patch change where you're standing: check-health,
+		// planting, harvesting a Hespori. Wait until the patch change has had time to arrive.
+		Iterator<Integer> actions = pendingActions.iterator();
+		while (actions.hasNext())
+		{
+			int xpTick = actions.next();
+			if (tick <= xpTick + ActionMatcher.WINDOW_TICKS)
+			{
+				continue;
+			}
+			actions.remove();
+			changed |= matchAction(xpTick);
+		}
+
+		// Backup: a sapling left the inventory and Farming XP followed.
 		Iterator<int[]> it = pendingPlants.iterator();
 		while (it.hasNext())
 		{
 			int[] pending = it.next();
-			// Wait one tick so the patch's own state change has arrived too.
 			if (tick > pending[0] && Math.abs(lastXpGainTick - pending[0]) <= PLANT_MATCH_TICKS)
 			{
-				onPlanted(plantedItemToCrop.get(pending[1]), pending[0]);
+				changed |= onPlanted(plantedItemToCrop.get(pending[1]), pending[0]);
 				it.remove();
-				changed = true;
 			}
 			else if (tick - pending[0] > PLANT_MATCH_TICKS)
 			{
@@ -366,6 +475,8 @@ public class TreeRunningPlugin extends Plugin
 				it.remove();
 			}
 		}
+
+		updateHintArrow();
 
 		if (changed)
 		{
@@ -376,45 +487,68 @@ public class TreeRunningPlugin extends Plugin
 
 	// ------------------------------------------------------------------ run tracking
 
-	private void onPlanted(CropType crop, int plantTick)
+	private boolean matchAction(int xpTick)
+	{
+		Set<PatchLocation> skip = EnumSet.noneOf(PatchLocation.class);
+		for (PatchLocation location : PatchLocation.values())
+		{
+			if (state.done.contains(RunTask.keyFor(location, 0)) || !isPatchEnabled(location))
+			{
+				skip.add(location);
+			}
+		}
+		PatchLocation location = ActionMatcher.find(xpTick, recentPatchChanges, skip);
+		if (location == null)
+		{
+			debug.log(xpTick, "  no single patch matched this XP");
+			return false;
+		}
+
+		List<RunTask> tasks = currentTasks(buildSettings());
+		for (RunTask task : tasks)
+		{
+			if (task.getLocation() == location)
+			{
+				startIfNeeded(xpTick);
+				markDone(task);
+				lastMatch = task.getLabel();
+				debug.log(xpTick, "  ticked " + task.getKey() + " (XP + patch change)");
+				return true;
+			}
+		}
+		debug.log(xpTick, "  matched " + location + " but it isn't on the run (check its crop and level)");
+		return false;
+	}
+
+	private boolean onPlanted(CropType crop, int plantTick)
 	{
 		if (crop == null)
 		{
-			return;
+			return false;
 		}
 
-		PlanSettings settings = buildSettings();
-		List<RunTask> tasks = currentTasks(settings);
-
-		if (!state.active)
-		{
-			int lookback = 0;
-			for (int[] gain : recentXpGains)
-			{
-				lookback += gain[1];
-			}
-			beginRun(client.getSkillExperience(Skill.FARMING) - lookback);
-		}
-
+		List<RunTask> tasks = currentTasks(buildSettings());
 		Set<PatchLocation> changed = new LinkedHashSet<>();
-		for (PatchChange change : recentPatchChanges)
+		for (ActionMatcher.Change change : recentPatchChanges)
 		{
-			if (Math.abs(change.tick - plantTick) <= PATCH_MATCH_TICKS)
+			if (Math.abs(change.tick() - plantTick) <= PATCH_MATCH_TICKS)
 			{
-				changed.add(change.location);
+				changed.add(change.location());
 			}
 		}
 
 		PatchMatcher.Match match = PatchMatcher.match(tasks, state.done, crop.getPatchType(), currentRegion(), changed);
-		if (match != null)
+		if (match == null)
 		{
-			markDone(match.getTask());
-			lastMatch = match.getTask().getLabel()
-				+ (match.getConfidence() == PatchMatcher.Confidence.ROUTE ? " (guessed from route order)" : "");
-			log.debug("Planted {} → {} ({})", crop, match.getTask().getKey(), match.getConfidence());
+			debug.log(plantTick, "  planted " + crop + ": already ticked or nothing to match");
+			return false;
 		}
-
-		finishIfComplete(tasks);
+		startIfNeeded(plantTick);
+		markDone(match.getTask());
+		lastMatch = match.getTask().getLabel()
+			+ (match.getConfidence() == PatchMatcher.Confidence.ROUTE ? " (guessed from route order)" : "");
+		debug.log(plantTick, "  planted " + crop + " -> ticked " + match.getTask().getKey() + " (" + match.getConfidence() + ")");
+		return true;
 	}
 
 	/** Opening your bank during a run ticks the bank stop, if a bank stop is what's next. */
@@ -424,21 +558,42 @@ public class TreeRunningPlugin extends Plugin
 		{
 			return;
 		}
-		List<RouteItem> items = Route.build(currentTasks(buildSettings()), bankStops);
+		List<RouteItem> items = Route.build(currentTasks(buildSettings()), bankStops, routeOrder);
 		RouteItem next = Route.next(items, state.done);
 		if (next != null && next.isBank())
 		{
 			state.done.add(next.getKey());
+			debug.log(client.getTickCount(), "  ticked " + next.getKey());
 		}
 	}
 
+	/** Ticking only marks the patch; timers and run XP are saved on Finish run. */
 	private void markDone(RunTask task)
 	{
+		long now = System.currentTimeMillis();
 		state.done.add(task.getKey());
-		if (task.getCrop().getGrowthMinutes() > 1440.0 / config.runsPerDay())
+		state.tickedAt.put(task.getKey(), now);
+		state.lastTickAt = now;
+		state.runLastXp = client.getSkillExperience(Skill.FARMING);
+	}
+
+	/** Starts a run if none is going, after finishing one that was left open too long. */
+	private void startIfNeeded(int triggerTick)
+	{
+		finishIfStale();
+		if (state.active)
 		{
-			state.plantedAt.put(task.getKey(), System.currentTimeMillis());
+			return;
 		}
+		int lookback = 0;
+		for (int[] gain : recentXpGains)
+		{
+			if (gain[0] >= triggerTick - RUN_START_LOOKBACK_TICKS)
+			{
+				lookback += gain[1];
+			}
+		}
+		beginRun(client.getSkillExperience(Skill.FARMING) - lookback);
 	}
 
 	private void beginRun(int startXp)
@@ -446,33 +601,99 @@ public class TreeRunningPlugin extends Plugin
 		state.active = true;
 		state.startXp = startXp;
 		state.startedAt = System.currentTimeMillis();
+		state.lastTickAt = state.startedAt;
+		state.runLastXp = 0;
 		state.done.clear();
+		state.tickedAt.clear();
+		debug.log(client.getTickCount(), "Run started at " + startXp + " XP");
 	}
 
-	private void finishIfComplete(List<RunTask> tasks)
+	/** If you forget to press Finish run, it finishes 12 hours after its last patch (less with more runs a day). */
+	private void finishIfStale()
 	{
-		for (RunTask task : tasks)
+		long staleMs = (long) (Math.max(2, 12.0 / Math.max(1, config.runsPerDay())) * 3_600_000L);
+		if (state.active && state.lastTickAt > 0 && System.currentTimeMillis() - state.lastTickAt >= staleMs)
 		{
-			if (task.isDue() && !state.done.contains(task.getKey()))
-			{
-				return;
-			}
+			debug.log(client.getTickCount(), "Run left open; finishing it");
+			endRun();
 		}
-		endRun();
 	}
 
+	/** Saves the run to history and starts the growth timers of what was ticked. */
 	private void endRun()
 	{
 		if (!state.active)
 		{
 			return;
 		}
-		int gained = client.getSkillExperience(Skill.FARMING) - state.startXp;
-		if (gained > 0)
+		List<RunTask> tasks = currentTasks(buildSettings());
+		double minutesBetweenRuns = 1440.0 / Math.max(1, config.runsPerDay());
+		int patches = 0;
+		for (String key : state.done)
 		{
-			state.runXp.add(gained);
+			if (key.startsWith("bank:"))
+			{
+				continue;
+			}
+			patches++;
+			for (RunTask task : tasks)
+			{
+				if (task.getKey().equals(key) && task.getCrop().getGrowthMinutes() > minutesBetweenRuns)
+				{
+					state.plantedAt.put(key, state.tickedAt.getOrDefault(key, System.currentTimeMillis()));
+				}
+			}
 		}
+
+		int endXp = state.runLastXp > 0 ? state.runLastXp : client.getSkillExperience(Skill.FARMING);
+		int gained = endXp - state.startXp;
+		if (gained > 0 && patches > 0)
+		{
+			state.runs.add(new RunRecord(System.currentTimeMillis(), gained, patches));
+		}
+		debug.log(client.getTickCount(), "Run finished: " + gained + " XP, " + patches + " patches");
 		state.active = false;
+		state.done.clear();
+		state.tickedAt.clear();
+		lastMatch = null;
+	}
+
+	// ------------------------------------------------------------------ hint arrow
+
+	private void updateHintArrow()
+	{
+		if (!config.hintArrow())
+		{
+			return;
+		}
+		WorldPoint target = null;
+		RouteItem next = data.nextItem();
+		if (next != null && !next.isBank())
+		{
+			GameObject object = patchObjects.get(next.getTask().getLocation());
+			if (object != null)
+			{
+				target = object.getWorldLocation();
+			}
+		}
+		if (target == null)
+		{
+			clearOurHintArrow();
+		}
+		else if (!target.equals(ourHintArrow))
+		{
+			client.setHintArrow(target);
+			ourHintArrow = target;
+		}
+	}
+
+	private void clearOurHintArrow()
+	{
+		if (ourHintArrow != null && client.hasHintArrow() && ourHintArrow.equals(client.getHintArrowPoint()))
+		{
+			client.clearHintArrow();
+		}
+		ourHintArrow = null;
 	}
 
 	// ------------------------------------------------------------------ panel actions (called from Swing)
@@ -483,33 +704,29 @@ public class TreeRunningPlugin extends Plugin
 		{
 			if (state.done.remove(key))
 			{
-				saveState();
-				refresh();
-				return;
+				state.tickedAt.remove(key);
+				debug.log(client.getTickCount(), "Unticked " + key + " by hand");
 			}
-
-			PlanSettings settings = buildSettings();
-			List<RunTask> tasks = currentTasks(settings);
-			if (!state.active)
+			else
 			{
-				beginRun(client.getSkillExperience(Skill.FARMING));
-			}
-			if (key.startsWith("bank:"))
-			{
-				state.done.add(key);
-				saveState();
-				refresh();
-				return;
-			}
-			for (RunTask task : tasks)
-			{
-				if (task.getKey().equals(key))
+				startIfNeeded(client.getTickCount());
+				if (key.startsWith("bank:"))
 				{
-					markDone(task);
-					break;
+					state.done.add(key);
 				}
+				else
+				{
+					for (RunTask task : currentTasks(buildSettings()))
+					{
+						if (task.getKey().equals(key))
+						{
+							markDone(task);
+							break;
+						}
+					}
+				}
+				debug.log(client.getTickCount(), "Ticked " + key + " by hand");
 			}
-			finishIfComplete(tasks);
 			saveState();
 			refresh();
 		});
@@ -519,6 +736,7 @@ public class TreeRunningPlugin extends Plugin
 	{
 		clientThread.invokeLater(() ->
 		{
+			endRun();
 			beginRun(client.getSkillExperience(Skill.FARMING));
 			saveState();
 			refresh();
@@ -535,15 +753,30 @@ public class TreeRunningPlugin extends Plugin
 		});
 	}
 
+	void deleteRun(int index)
+	{
+		clientThread.invokeLater(() ->
+		{
+			if (index >= 0 && index < state.runs.size())
+			{
+				state.runs.remove(index);
+				saveState();
+				refresh();
+			}
+		});
+	}
+
 	void clearHistory()
 	{
 		clientThread.invokeLater(() ->
 		{
-			state.runXp.clear();
+			state.runs.clear();
 			saveState();
 			refresh();
 		});
 	}
+
+	// ------------------------------------------------------------------ settings (called from Swing)
 
 	/** Saves one setting from the XP tab. ConfigManager is thread-safe. */
 	void setSetting(String key, Object value)
@@ -589,6 +822,41 @@ public class TreeRunningPlugin extends Plugin
 		return new BankStop(UUID.randomUUID().toString().substring(0, 8), step, true, "");
 	}
 
+	RouteOrder getRouteOrder()
+	{
+		return routeOrder;
+	}
+
+	void saveRouteOrder(RouteOrder order)
+	{
+		routeOrder = order;
+		setSetting("stopOrder", gson.toJson(order.stopNames()));
+		setSetting("patchOrder", gson.toJson(order.patchNames()));
+	}
+
+	/** The travel note for a stop: the player's own, or the built-in one. */
+	String travelNote(RouteStep step)
+	{
+		String own = travelNotes.get(step);
+		return own != null ? own : step.getTravel();
+	}
+
+	Map<RouteStep, String> getTravelNotes()
+	{
+		return new EnumMap<>(travelNotes.isEmpty() ? new EnumMap<>(RouteStep.class) : travelNotes);
+	}
+
+	void saveTravelNotes(Map<RouteStep, String> notes)
+	{
+		travelNotes = Collections.unmodifiableMap(new EnumMap<>(notes.isEmpty() ? new EnumMap<>(RouteStep.class) : notes));
+		Map<String, String> byName = new HashMap<>();
+		for (Map.Entry<RouteStep, String> e : notes.entrySet())
+		{
+			byName.put(e.getKey().name(), e.getValue());
+		}
+		setSetting("travelText", gson.toJson(byName));
+	}
+
 	private void loadBankStops()
 	{
 		List<BankStop> loaded = new ArrayList<>();
@@ -615,6 +883,52 @@ public class TreeRunningPlugin extends Plugin
 		bankStops = Collections.unmodifiableList(loaded);
 	}
 
+	private void loadRouteOrder()
+	{
+		try
+		{
+			List<String> stops = gson.fromJson(config.stopOrder(), new TypeToken<List<String>>()
+			{
+			}.getType());
+			Map<String, List<String>> patches = gson.fromJson(config.patchOrder(), new TypeToken<Map<String, List<String>>>()
+			{
+			}.getType());
+			routeOrder = RouteOrder.fromNames(stops, patches);
+		}
+		catch (JsonParseException e)
+		{
+			log.warn("Couldn't read saved route order", e);
+			routeOrder = RouteOrder.defaults();
+		}
+	}
+
+	private void loadTravelNotes()
+	{
+		Map<RouteStep, String> notes = new EnumMap<>(RouteStep.class);
+		try
+		{
+			Map<String, String> byName = gson.fromJson(config.travelText(), new TypeToken<Map<String, String>>()
+			{
+			}.getType());
+			if (byName != null)
+			{
+				for (RouteStep step : RouteStep.values())
+				{
+					String note = byName.get(step.name());
+					if (note != null)
+					{
+						notes.put(step, note);
+					}
+				}
+			}
+		}
+		catch (JsonParseException e)
+		{
+			log.warn("Couldn't read saved travel notes", e);
+		}
+		travelNotes = Collections.unmodifiableMap(notes);
+	}
+
 	// ------------------------------------------------------------------ planning
 
 	private PlanSettings buildSettings()
@@ -623,7 +937,7 @@ public class TreeRunningPlugin extends Plugin
 		crops.put(PatchType.TREE, config.treeCrop().crop());
 		crops.put(PatchType.FRUIT_TREE, config.fruitCrop().crop());
 		crops.put(PatchType.HARDWOOD, config.hardwoodCrop().crop());
-		// These patch types only take one crop; each patch is switched on or off in the Patches section.
+		// These patch types only take one crop; each patch is switched on or off in Route & patches.
 		crops.put(PatchType.CALQUAT, CropType.CALQUAT);
 		crops.put(PatchType.CELASTRUS, CropType.CELASTRUS);
 		crops.put(PatchType.REDWOOD, CropType.REDWOOD);
@@ -649,13 +963,14 @@ public class TreeRunningPlugin extends Plugin
 			: XpTable.xpForLevel(Math.max(2, Math.min(99, config.goalLevel())));
 	}
 
+	/** The run's patches in the player's route order. */
 	private List<RunTask> currentTasks(PlanSettings settings)
 	{
-		return RunPlanner.buildTasks(settings, client.getRealSkillLevel(Skill.FARMING), state.plantedAt,
-			System.currentTimeMillis());
+		return routeOrder.sort(RunPlanner.buildTasks(settings, client.getRealSkillLevel(Skill.FARMING), state.plantedAt,
+			System.currentTimeMillis()));
 	}
 
-	/** Recomputes everything shown in the panel and overlay. Must run on the client thread. */
+	/** Recomputes everything shown in the panel and overlays. Must run on the client thread. */
 	private void refresh()
 	{
 		if (client.getGameState() != GameState.LOGGED_IN)
@@ -664,14 +979,21 @@ public class TreeRunningPlugin extends Plugin
 			return;
 		}
 
+		finishIfStale();
+
 		PlanSettings settings = buildSettings();
 		int xp = client.getSkillExperience(Skill.FARMING);
 		int level = client.getRealSkillLevel(Skill.FARMING);
 		int goalXp = settings.getGoalXp();
 
+		List<Integer> runXp = new ArrayList<>();
+		for (RunRecord r : state.runs)
+		{
+			runXp.add(r.xp);
+		}
 		XpProjection planned = XpProjection.toGoal(xp, settings);
-		int counted = Math.min(config.averageOver(), state.runXp.size());
-		double actual = XpProjection.averageOfRecent(state.runXp, config.averageOver());
+		int counted = Math.min(config.averageOver(), runXp.size());
+		double actual = XpProjection.averageOfRecent(runXp, config.averageOver());
 
 		boolean fromActual = actual > 0;
 		int runsLeft = fromActual ? XpProjection.runsAtRate(xp, goalXp, actual) : planned.getRuns();
@@ -708,15 +1030,22 @@ public class TreeRunningPlugin extends Plugin
 		d.runsLeftFromActual = fromActual;
 		d.runsPerDay = settings.getRunsPerDay();
 		d.tasks = tasks;
-		d.items = Route.build(tasks, bankStops);
+		d.items = Route.build(tasks, bankStops, routeOrder);
 		d.done = new HashSet<>(state.done);
 		d.runActive = state.active;
 		d.runXpSoFar = state.active ? Math.max(0, xp - state.startXp) : 0;
 		d.lastMatch = lastMatch;
-		d.needs = RunNeeds.compute(tasks);
+		d.needs = RunNeeds.compute(tasks, d.done, id -> inv.getOrDefault(id, 0));
 		d.supplies = supplies;
 		d.bankSeenAt = state.bankSeenAt;
 		d.vaultSeenAt = state.vaultSeenAt;
+		d.runs = new ArrayList<>(state.runs);
+		Map<RouteStep, String> travel = new EnumMap<>(RouteStep.class);
+		for (RouteStep step : RouteStep.values())
+		{
+			travel.put(step, travelNote(step));
+		}
+		d.travel = travel;
 		publish(d);
 	}
 
@@ -734,15 +1063,27 @@ public class TreeRunningPlugin extends Plugin
 	/** The map region you're standing in, translated out of instances. -1 if unknown. */
 	private int currentRegion()
 	{
+		WorldPoint point = playerLocation();
+		return point == null ? -1 : point.getRegionID();
+	}
+
+	private WorldPoint playerLocation()
+	{
 		Player player = client.getLocalPlayer();
 		if (player == null)
 		{
-			return -1;
+			return null;
 		}
-		WorldPoint point = client.getTopLevelWorldView().isInstance()
+		return client.getTopLevelWorldView().isInstance()
 			? WorldPoint.fromLocalInstance(client, player.getLocalLocation())
 			: player.getWorldLocation();
-		return point == null ? -1 : point.getRegionID();
+	}
+
+	/** For the debug log: region and tile. */
+	private String where()
+	{
+		WorldPoint p = playerLocation();
+		return p == null ? "unknown" : "region " + p.getRegionID() + " (" + p.getX() + "," + p.getY() + "," + p.getPlane() + ")";
 	}
 
 	/** Counts tracked items, folding noted copies into their unnoted ID. */
@@ -778,7 +1119,7 @@ public class TreeRunningPlugin extends Plugin
 			{
 				loaded = gson.fromJson(json, RunState.class);
 			}
-			catch (JsonSyntaxException e)
+			catch (JsonParseException e)
 			{
 				log.warn("Couldn't read saved farming run state, starting fresh", e);
 			}
@@ -791,5 +1132,4 @@ public class TreeRunningPlugin extends Plugin
 	{
 		configManager.setRSProfileConfiguration(TreeRunningConfig.GROUP, STATE_KEY, gson.toJson(state));
 	}
-
 }

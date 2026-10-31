@@ -3,6 +3,9 @@ package com.treerunning;
 import com.treerunning.core.BankStop;
 import com.treerunning.core.Route;
 import com.treerunning.core.RunNeeds;
+import com.treerunning.core.RouteOrder;
+import com.treerunning.core.RunRecord;
+import java.util.ArrayList;
 import com.treerunning.core.XpTable;
 import com.treerunning.data.RouteStep;
 import java.util.Collections;
@@ -81,12 +84,26 @@ public class PanelSnapshot
 		data.plannedRuns = planned.getRuns();
 		data.runsLeft = planned.getRuns();
 		data.tasks = tasks;
-		data.items = Route.build(tasks, banks);
+		data.items = Route.build(tasks, banks, RouteOrder.defaults());
 		data.done = done;
 		data.runActive = true;
 		data.runXpSoFar = 52_000;
 		data.lastMatch = "Yew – Gnome Stronghold";
-		data.needs = RunNeeds.compute(tasks);
+		Map<Integer, Integer> inv = new HashMap<>();
+		inv.put(CropType.YEW.getSapling().getId(), 3);
+		inv.put(CropType.YEW.getPayment().getId(), 30);
+		inv.put(CropType.PAPAYA.getSapling().getId(), 6);
+		inv.put(CropType.PAPAYA.getPayment().getId(), 60);
+		data.needs = RunNeeds.compute(tasks, done, id -> inv.getOrDefault(id, 0));
+		List<RunRecord> runs = new ArrayList<>();
+		long now = System.currentTimeMillis();
+		runs.add(new RunRecord(now - 2 * 86_400_000L, 98_412, 21));
+		runs.add(new RunRecord(now - 86_400_000L, 101_870, 22));
+		runs.add(new RunRecord(0, 95_002, -1));
+		data.runs = runs;
+		Map<RouteStep, String> travel = new EnumMap<>(RouteStep.class);
+		travel.put(RouteStep.CATHERBY, "Catherby teleport tab, walk east");
+		data.travel = travel;
 		data.supplies = SupplyCalculator.compute(XpProjection.forRuns(xp, planned.getRuns(), settings).getPlantings(),
 			id -> have.getOrDefault(id, 0), id -> price.getOrDefault(id, 0L));
 		data.bankSeenAt = System.currentTimeMillis() - 2 * 3_600_000L;
@@ -97,7 +114,7 @@ public class PanelSnapshot
 			// Every setting has a default, so an empty implementation is the default config.
 			panel.loadSettings(new TreeRunningConfig()
 			{
-			}, banks, location -> true);
+			}, banks, RouteOrder.defaults(), travel, location -> true);
 			panel.update(data);
 			JTabbedPane tabs = (JTabbedPane) panel.getComponent(0);
 			for (int i = 0; i < tabs.getTabCount(); i++)

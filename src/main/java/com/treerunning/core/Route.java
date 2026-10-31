@@ -6,8 +6,8 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * Puts patches and bank stops in the order you do them: for each stop, the bank stops set
- * to "before", then its patches, then the bank stops set to "after".
+ * Puts patches and bank stops in the order you do them: stops in the player's order, and at
+ * each stop the bank stops set to "before", then its patches, then the bank stops set to "after".
  */
 public final class Route
 {
@@ -17,8 +17,14 @@ public final class Route
 
 	public static List<RouteItem> build(List<RunTask> tasks, List<BankStop> bankStops)
 	{
+		return build(tasks, bankStops, RouteOrder.defaults());
+	}
+
+	/** Tasks should already be sorted with {@link RouteOrder#sort}. */
+	public static List<RouteItem> build(List<RunTask> tasks, List<BankStop> bankStops, RouteOrder order)
+	{
 		List<RouteItem> items = new ArrayList<>();
-		for (RouteStep step : RouteStep.values())
+		for (RouteStep step : order.getStops())
 		{
 			addBanks(items, step, bankStops, true);
 			for (RunTask task : tasks)

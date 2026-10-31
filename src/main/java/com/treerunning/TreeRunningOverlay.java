@@ -56,13 +56,17 @@ class TreeRunningOverlay extends OverlayPanel
 		RouteItem next = d.nextItem();
 		if (next == null)
 		{
-			panelComponent.getChildren().add(LineComponent.builder().left("All due patches planted.").leftColor(DONE).build());
+			panelComponent.getChildren().add(LineComponent.builder().left(d.runActive ? "All done. Press Finish run." : "All due patches done.").leftColor(DONE).build());
 			return super.render(graphics);
 		}
 
 		RouteStep step = next.getStep();
 		panelComponent.getChildren().add(LineComponent.builder().left(step.getDisplayName()).leftColor(Color.YELLOW).build());
-		panelComponent.getChildren().add(LineComponent.builder().left(step.getTravel()).leftColor(HINT).build());
+		String travel = d.travelNote(step);
+		if (!travel.trim().isEmpty())
+		{
+			panelComponent.getChildren().add(LineComponent.builder().left(travel).leftColor(HINT).build());
+		}
 
 		for (RouteItem item : d.items)
 		{

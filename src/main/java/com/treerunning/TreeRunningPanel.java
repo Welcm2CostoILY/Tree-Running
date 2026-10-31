@@ -56,7 +56,6 @@ import javax.swing.event.DocumentListener;
 import net.runelite.client.ui.ColorScheme;
 import net.runelite.client.ui.FontManager;
 import net.runelite.client.ui.PluginPanel;
-import net.runelite.client.util.LinkBrowser;
 
 /**
  * Side panel with three tabs: XP (progress and all settings), Run and Supplies.
@@ -365,14 +364,16 @@ class TreeRunningPanel extends PluginPanel
 		settingsPanel.add(section("Debug"));
 		settingsPanel.add(checkField("Debug log", config.debugLog(), "debugLog"));
 		settingsPanel.add(text("Writes what the tracker sees to a file in .runelite/tree-running. Turn it on for a few runs "
-			+ "if ticking misses a patch, then send the files.", MUTED));
-		JButton open = button("Open log folder");
-		open.addActionListener(e ->
-		{
-			DebugLog.FOLDER.mkdirs();
-			LinkBrowser.open(DebugLog.FOLDER.getAbsolutePath());
-		});
-		settingsPanel.add(open);
+			+ "if ticking misses a patch, then send the files from this folder:", MUTED));
+		// Plugins can't open folders, so show the path where it can be selected and copied.
+		JTextField folder = new JTextField(DebugLog.FOLDER.getAbsolutePath());
+		styleInput(folder);
+		folder.setEditable(false);
+		folder.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
+		folder.setToolTipText("The log folder. Select and copy this path.");
+		folder.setMaximumSize(new Dimension(Integer.MAX_VALUE, 24));
+		folder.setAlignmentX(LEFT_ALIGNMENT);
+		settingsPanel.add(folder);
 	}
 
 	/** The route editor: every stop, its patches, and its bank stops before or after them. */

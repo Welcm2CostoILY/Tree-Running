@@ -44,7 +44,7 @@ From a terminal, `./gradlew runClient` (or `gradlew.bat runClient` on Windows) d
 
 ## Debug log
 
-If a patch doesn't tick when it should, turn on **Debug log** at the bottom of the XP tab's settings and do a few runs. It writes Farming XP drops, patch changes, saplings leaving your inventory and every tick decision to `.runelite/tree-running/debug-YYYY-MM-DD.log` (the **Open log folder** button opens it). Send those files along with a note of which patches it missed.
+If a patch doesn't tick when it should, turn on **Debug log** at the bottom of the XP tab's settings and do a few runs. It writes Farming XP drops, patch changes, saplings leaving your inventory and every tick decision to `.runelite/tree-running/debug-YYYY-MM-DD.log` (the full path is shown under the setting). Send those files along with a note of which patches it missed.
 
 ## Preview
 

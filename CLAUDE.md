@@ -32,7 +32,7 @@ A RuneLite plugin for daily OSRS Farming tree runs toward a goal, such as 99 Far
   - `PatchHighlightOverlay`: patch outlines.
   - `PanelData`: an immutable snapshot that the client thread publishes to Swing and the overlays.
   - `RunState`: per-account state in RS profile config, key `state`, JSON.
-  - `DebugLog`: writes `.runelite/tree-running/debug-DATE.log` when enabled.
+  - `DebugLog`: when enabled, logs `[Tree Running]` lines to RuneLite's `client.log`. No file I/O of its own: Plugin Hub flags java.io/java.nio for extra review, and bans process execution such as `LinkBrowser.open`.
 
 ## Rules that matter
 
@@ -56,5 +56,5 @@ Plugin Hub PR #19586, the first version, is merged. Each update is a **new** PR 
 
 ## Open work
 
-- Fix tracking against the owner's debug logs (`.runelite/tree-running/*.log`) from real runs.
+- Fix tracking against the owner's debug logs (`[Tree Running]` lines in `.runelite/logs/client.log`) from real runs.
 - Optional: read patch state from RuneLite Time Tracking. Its RS profile config group is `timetracking`, with key `region.varbit` and value `varbitValue:epoch`. It was skipped as fragile.

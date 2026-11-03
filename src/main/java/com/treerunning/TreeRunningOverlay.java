@@ -147,7 +147,11 @@ class TreeRunningOverlay extends OverlayPanel
 			return super.render(graphics);
 		}
 		panelComponent.getChildren().add(LineComponent.builder().left(next.getLocation().getDisplayName()).leftColor(Color.YELLOW).build());
-		panelComponent.getChildren().add(LineComponent.builder().left(next.getLocation().getTravel()).leftColor(HINT).build());
+		String herbTravel = d.travelNote(next.getLocation());
+		if (!herbTravel.trim().isEmpty())
+		{
+			panelComponent.getChildren().add(LineComponent.builder().left(herbTravel).leftColor(HINT).build());
+		}
 		for (HerbTask task : d.herbTasks)
 		{
 			if (task.getLocation() != next.getLocation() || !task.isDue())

@@ -76,10 +76,12 @@ class PatchHighlightOverlay extends Overlay
 				}
 			}
 		}
-		if (d.highlightGardeners && !d.unpaid.isEmpty())
+		if (d.highlightGardeners && (!d.unpaid.isEmpty() || !d.unpaidAllotments.isEmpty()))
 		{
 			Map<Integer, NPC> gardeners = plugin.getGardeners();
-			for (String key : d.unpaid)
+			java.util.Set<String> keys = new java.util.HashSet<>(d.unpaid);
+			keys.addAll(d.unpaidAllotments);
+			for (String key : keys)
 			{
 				TrackedPatch patch = TrackedPatch.BY_KEY.get(key);
 				NPC npc = patch == null ? null : gardeners.get(patch.gardener);

@@ -124,7 +124,11 @@ public class TreeRunningPlugin extends Plugin
 	private static final long HERB_RUN_STALE_MS = 2 * 3_600_000L;
 	/** A compost message ties to the patch you used the compost on this many ticks before. */
 	private static final int COMPOST_MATCH_TICKS = 10;
+	/** Patch changes this soon after arriving are the area's varbits catching up. */
+	private static final int ARRIVAL_SETTLE_TICKS = 2;
 
+	/** Herb travel notes are saved beside the tree-stop ones, under this prefix. */
+	private static final String HERB_TRAVEL_PREFIX = "HERB_";
 	static final String TREE_TAG = "tree running: tree run";
 	static final String HERB_TAG = "tree running: herb run";
 
@@ -187,6 +191,7 @@ public class TreeRunningPlugin extends Plugin
 	private volatile List<BankStop> bankStops = Collections.emptyList();
 	private volatile RouteOrder routeOrder = RouteOrder.defaults();
 	private volatile Map<RouteStep, String> travelNotes = Collections.emptyMap();
+	private volatile Map<HerbLocation, String> herbTravelNotes = Collections.emptyMap();
 	private String lastMatch;
 	private String herbLastMatch;
 	private volatile PanelData data = PanelData.EMPTY;
@@ -194,6 +199,8 @@ public class TreeRunningPlugin extends Plugin
 	private final Map<Integer, CropType> plantedItemToCrop = new HashMap<>();
 	private final Set<Integer> trackedItems = new HashSet<>();
 	private final Set<Integer> produceItems = new HashSet<>();
+	/** Produce of the crops on the tree run (papaya fruit, celastrus bark...), so payments bought aren't counted. */
+	private Set<Integer> runProduce = Collections.emptySet();
 
 	private Map<Integer, Integer> inventory = new HashMap<>();
 	private Map<Integer, Integer> equipment = new HashMap<>();
@@ -208,6 +215,7 @@ public class TreeRunningPlugin extends Plugin
 	private final Map<String, PatchReading[]> lastTransition = new HashMap<>();
 	private final Map<String, PatchReading> currentReading = new HashMap<>();
 	private final Map<String, Integer> lastValue = new HashMap<>();
+	private final Map<String, Integer> arrivedAt = new HashMap<>();
 	private int lastCompostTick = -100;
 	private String compostTarget;
 	private int compostTargetTick = -100;
@@ -265,6 +273,8 @@ public class TreeRunningPlugin extends Plugin
 		trackedItems.add(ItemID.BUCKET_SUPERCOMPOST);
 		trackedItems.add(ItemID.BUCKET_COMPOST);
 		trackedItems.add(ItemID.FAIRY_ENCHANTED_SECATEURS);
+		trackedItems.add(ItemID.BOTTOMLESS_COMPOST_BUCKET_FILLED);
+		trackedItems.add(ItemID.BOTTOMLESS_COMPOST_BUCKET);
 
 		Set<Integer> ids = new HashSet<>();
 		for (TrackedPatch p : TrackedPatch.ALL)
@@ -378,6 +388,7 @@ public class TreeRunningPlugin extends Plugin
 			gardeners.clear();
 			currentReading.clear();
 			lastValue.clear();
+			arrivedAt.clear();
 		}
 		if (event.getGameState() == GameState.LOGGED_IN)
 		{
@@ -389,9 +400,15 @@ public class TreeRunningPlugin extends Plugin
 	@Subscribe
 	public void onConfigChanged(ConfigChanged event)
 	{
-		if (!TreeRunningConfig.GROUP.equals(event.getGroup()))
+		if (!TreeRunningConfig.GROUP.equals(event.getGroup()) || STATE_KEY.equals(event.getKey()))
 		{
 			return;
+		}
+		if ((TreeRunningConfig.PATCH_KEYS.containsValue(event.getKey()) || TreeRunningConfig.HERB_ENABLED_KEYS.containsValue(event.getKey()))
+			&& panel != null)
+		{
+			// The route editor greys out patches that are off.
+			SwingUtilities.invokeLater(panel::loadRouteEditor);
 		}
 		switch (event.getKey())
 		{
@@ -481,7 +498,7 @@ public class TreeRunningPlugin extends Plugin
 			if (state.active && !isBankOpen())
 			{
 				boolean changed = false;
-				for (int id : produceItems)
+				for (int id : runProduce)
 				{
 					int gained = now.getOrDefault(id, 0) - inventory.getOrDefault(id, 0);
 					if (gained > 0)
@@ -728,6 +745,13 @@ public class TreeRunningPlugin extends Plugin
 			PatchReading before = currentReading.put(patch.key, reading);
 			if (old == null)
 			{
+				arrivedAt.put(patch.key, tick);
+				changed |= remember(patch, reading);
+				continue;
+			}
+			if (old != value && tick - arrivedAt.getOrDefault(patch.key, tick) <= ARRIVAL_SETTLE_TICKS)
+			{
+				// The area's varbits can arrive a tick after you do; that isn't a change.
 				changed |= remember(patch, reading);
 				continue;
 			}
@@ -743,6 +767,7 @@ public class TreeRunningPlugin extends Plugin
 		// Leaving an area forgets its readings, so coming back starts fresh.
 		lastValue.keySet().retainAll(here);
 		currentReading.keySet().retainAll(here);
+		arrivedAt.keySet().retainAll(here);
 		while (!recentPatchChanges.isEmpty() && tick - recentPatchChanges.peekFirst().tick() > 2 * PATCH_MATCH_TICKS)
 		{
 			recentPatchChanges.removeFirst();
@@ -844,6 +869,13 @@ public class TreeRunningPlugin extends Plugin
 			state.herbLastTickAt = System.currentTimeMillis();
 			herbLastMatch = "Planted " + after.getCrop() + " at " + patch.name();
 			debug.log(xpTick, "  " + herbLastMatch);
+			return true;
+		}
+		if (was == PatchCondition.GROWN && after.getCondition() == PatchCondition.GROWN)
+		{
+			// A grown patch shows fewer plants as its harvest runs down; each step is a pick.
+			startHerbRunIfNeeded();
+			countPicks(patch, before.getCrop(), delta);
 			return true;
 		}
 		if (was == PatchCondition.GROWN && (after.isWeeds() || after.getCondition() == PatchCondition.EMPTY))
@@ -1066,6 +1098,7 @@ public class TreeRunningPlugin extends Plugin
 		TrackedPatch patch = TrackedPatch.BY_KEY.get(key);
 		if (patch != null && patch.type == TrackedPatch.Type.ALLOTMENT)
 		{
+			startHerbRunIfNeeded();
 			state.herbDone.add(HerbTask.stepKey(key, HerbTask.PAY));
 			state.herbCost += allotmentPaymentCost();
 		}
@@ -1180,8 +1213,15 @@ public class TreeRunningPlugin extends Plugin
 				{
 					state.plantedAt.put(key, state.tickedAt.getOrDefault(key, System.currentTimeMillis()));
 					CropType crop = task.getCrop();
-					// Saplings aren't traded, so a planting costs its seed.
-					cost += price(crop.getSeed().getId());
+					// Saplings aren't traded, so a planting costs its seed. A patch seen only checked
+					// this run (a fruit tree left standing) wasn't replanted, so it costs nothing.
+					SeenPatch seen = state.seen.get(key);
+					boolean replanted = seen == null || seen.seenAt < state.startedAt
+						|| seen.condition == PatchCondition.GROWING;
+					if (replanted)
+					{
+						cost += price(crop.getSeed().getId());
+					}
 					if (crop.getPayment() != null && state.paid.contains(key))
 					{
 						cost += (long) crop.getPaymentQuantity() * price(crop.getPayment().getId());
@@ -1606,6 +1646,11 @@ public class TreeRunningPlugin extends Plugin
 		return value == null ? !location.isOffByDefault() : Boolean.parseBoolean(value);
 	}
 
+	boolean isHerbEnabled(HerbLocation location)
+	{
+		return herbFlag(TreeRunningConfig.HERB_ENABLED_KEYS, location, location != HerbLocation.HARMONY_ISLAND);
+	}
+
 	private boolean herbFlag(Map<HerbLocation, String> keys, HerbLocation location, boolean fallback)
 	{
 		String value = configManager.getConfiguration(TreeRunningConfig.GROUP, keys.get(location));
@@ -1675,15 +1720,36 @@ public class TreeRunningPlugin extends Plugin
 		return copy;
 	}
 
-	void saveTravelNotes(Map<RouteStep, String> notes)
+	Map<HerbLocation, String> getHerbTravelNotes()
+	{
+		Map<HerbLocation, String> copy = new EnumMap<>(HerbLocation.class);
+		copy.putAll(herbTravelNotes);
+		return copy;
+	}
+
+	String travelNote(HerbLocation location)
+	{
+		String own = herbTravelNotes.get(location);
+		return own != null ? own : location.getTravel();
+	}
+
+	/** Saves the tree-stop and herb-patch travel notes you typed (both in one setting). */
+	void saveTravelNotes(Map<RouteStep, String> notes, Map<HerbLocation, String> herbNotes)
 	{
 		Map<RouteStep, String> copy = new EnumMap<>(RouteStep.class);
 		copy.putAll(notes);
 		travelNotes = Collections.unmodifiableMap(copy);
+		Map<HerbLocation, String> herbCopy = new EnumMap<>(HerbLocation.class);
+		herbCopy.putAll(herbNotes);
+		herbTravelNotes = Collections.unmodifiableMap(herbCopy);
 		Map<String, String> byName = new HashMap<>();
 		for (Map.Entry<RouteStep, String> e : notes.entrySet())
 		{
 			byName.put(e.getKey().name(), e.getValue());
+		}
+		for (Map.Entry<HerbLocation, String> e : herbNotes.entrySet())
+		{
+			byName.put(HERB_TRAVEL_PREFIX + e.getKey().name(), e.getValue());
 		}
 		setSetting("travelText", gson.toJson(byName));
 	}
@@ -1736,6 +1802,7 @@ public class TreeRunningPlugin extends Plugin
 	private void loadTravelNotes()
 	{
 		Map<RouteStep, String> notes = new EnumMap<>(RouteStep.class);
+		Map<HerbLocation, String> herbNotes = new EnumMap<>(HerbLocation.class);
 		try
 		{
 			Map<String, String> byName = gson.fromJson(config.travelText(), new TypeToken<Map<String, String>>()
@@ -1751,6 +1818,14 @@ public class TreeRunningPlugin extends Plugin
 						notes.put(step, note);
 					}
 				}
+				for (HerbLocation location : HerbLocation.values())
+				{
+					String note = byName.get(HERB_TRAVEL_PREFIX + location.name());
+					if (note != null)
+					{
+						herbNotes.put(location, note);
+					}
+				}
 			}
 		}
 		catch (JsonParseException e)
@@ -1758,6 +1833,7 @@ public class TreeRunningPlugin extends Plugin
 			log.warn("Couldn't read saved travel notes", e);
 		}
 		travelNotes = Collections.unmodifiableMap(notes);
+		herbTravelNotes = Collections.unmodifiableMap(herbNotes);
 	}
 
 	// ------------------------------------------------------------------ planning
@@ -1793,7 +1869,7 @@ public class TreeRunningPlugin extends Plugin
 		for (HerbLocation location : HerbLocation.values())
 		{
 			herbs.put(location, herbChoice(location));
-			if (herbFlag(TreeRunningConfig.HERB_ENABLED_KEYS, location, location != HerbLocation.HARMONY_ISLAND))
+			if (isHerbEnabled(location))
 			{
 				enabled.add(location);
 			}
@@ -1871,6 +1947,15 @@ public class TreeRunningPlugin extends Plugin
 			id -> itemManager.getItemPriceWithSource(id, true));
 
 		List<RunTask> tasks = currentTasks(settings);
+		Set<Integer> produce = new HashSet<>();
+		for (RunTask task : tasks)
+		{
+			if (task.getCrop().getProduce() != null)
+			{
+				produce.add(task.getCrop().getProduce().getId());
+			}
+		}
+		runProduce = produce;
 		HerbSettings herbSettings = buildHerbSettings(level);
 		List<HerbTask> herbTasks = HerbPlanner.buildTasks(herbSettings, state.seen, now);
 
@@ -1914,12 +1999,19 @@ public class TreeRunningPlugin extends Plugin
 			}
 		}
 		d.unpaid = unpaid;
+		d.plantedAt = new HashMap<>(state.plantedAt);
 		Map<RouteStep, String> travel = new EnumMap<>(RouteStep.class);
 		for (RouteStep step : RouteStep.values())
 		{
 			travel.put(step, travelNote(step));
 		}
 		d.travel = travel;
+		Map<HerbLocation, String> herbTravel = new EnumMap<>(HerbLocation.class);
+		for (HerbLocation location : HerbLocation.values())
+		{
+			herbTravel.put(location, travelNote(location));
+		}
+		d.herbTravel = herbTravel;
 		d.bankFilter = config.bankFilter();
 		d.highlightGardeners = config.highlightGardeners();
 
@@ -1928,6 +2020,19 @@ public class TreeRunningPlugin extends Plugin
 		Map<Integer, Integer> carried = new HashMap<>(inv);
 		equipment.forEach((k, v) -> carried.merge(k, v, Integer::sum));
 		d.herbTasks = herbTasks;
+		if (config.payForAllotments())
+		{
+			Set<String> unpaidAllotments = new HashSet<>();
+			for (HerbTask task : herbTasks)
+			{
+				if (task.isAllotment() && task.getLocation().getAllotmentGardener() >= 0
+					&& herbDone.contains(task.stepKey(HerbTask.PLANT)) && !state.paid.contains(task.getKey()))
+				{
+					unpaidAllotments.add(task.getKey());
+				}
+			}
+			d.unpaidAllotments = unpaidAllotments;
+		}
 		d.herbDone = herbDone;
 		d.herbActive = state.herbActive;
 		d.herbStartedAt = state.herbStartedAt;
@@ -2019,7 +2124,10 @@ public class TreeRunningPlugin extends Plugin
 
 	private void publish(PanelData snapshot)
 	{
-		snapshot.tagKey = treeTagItems.hashCode() * 31 + herbTagItems.hashCode();
+		if (snapshot != PanelData.EMPTY)
+		{
+			snapshot.tagKey = treeTagItems.hashCode() * 31 + herbTagItems.hashCode();
+		}
 		PanelData previous = data;
 		data = snapshot;
 		if (panel != null)

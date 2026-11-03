@@ -213,7 +213,8 @@ public class PanelSnapshot
 		SwingUtilities.invokeAndWait(() ->
 		{
 			TreeRunningPanel panel = new TreeRunningPanel(null);
-			panel.loadRouteEditor(banks, RouteOrder.defaults(), travel, location -> location != PatchLocation.CRYSTAL_PRIFDDINAS);
+			panel.loadRouteEditor(banks, RouteOrder.defaults(), travel, new EnumMap<>(HerbLocation.class),
+				location -> location != PatchLocation.CRYSTAL_PRIFDDINAS, location -> location != HerbLocation.HARMONY_ISLAND);
 			panel.update(data);
 			JTabbedPane tabs = (JTabbedPane) panel.getComponent(0);
 			for (int i = 0; i < tabs.getTabCount(); i++)

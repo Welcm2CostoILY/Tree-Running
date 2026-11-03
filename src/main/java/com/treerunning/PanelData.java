@@ -11,6 +11,7 @@ import com.treerunning.core.RunTask;
 import com.treerunning.core.SeenPatch;
 import com.treerunning.core.SupplyCalculator;
 import com.treerunning.data.Compost;
+import com.treerunning.data.HerbLocation;
 import com.treerunning.data.RouteStep;
 import java.util.Collections;
 import java.util.List;
@@ -59,6 +60,10 @@ final class PanelData
 	Set<String> paid = Collections.emptySet();
 	/** Ticked patches whose gardener hasn't been paid. */
 	Set<String> unpaid = Collections.emptySet();
+	/** Planted allotments whose gardener hasn't been paid (when paying is on). */
+	Set<String> unpaidAllotments = Collections.emptySet();
+	/** When each tree patch was planted on a finished run, by key. */
+	Map<String, Long> plantedAt = Collections.emptyMap();
 	boolean highlightGardeners = true;
 	/** Grown herb patches next to tree-run stops ("herbs on the way"); empty when that's off. */
 	Map<RouteStep, List<HerbTask>> onTheWay = Collections.emptyMap();
@@ -68,6 +73,7 @@ final class PanelData
 	long vaultSeenAt;
 	List<RunRecord> runs = Collections.emptyList();
 	Map<RouteStep, String> travel = Collections.emptyMap();
+	Map<HerbLocation, String> herbTravel = Collections.emptyMap();
 	TreeRunningConfig.BankFilter bankFilter = TreeRunningConfig.BankFilter.OFF;
 	/** Changes when the bank filter's items change. */
 	int tagKey;
@@ -140,6 +146,12 @@ final class PanelData
 	{
 		String note = travel.get(step);
 		return note != null ? note : step.getTravel();
+	}
+
+	String travelNote(HerbLocation location)
+	{
+		String note = herbTravel.get(location);
+		return note != null ? note : location.getTravel();
 	}
 
 	/** Days to the goal with tree and herb runs together, or -1. */

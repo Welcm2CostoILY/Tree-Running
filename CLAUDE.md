@@ -5,7 +5,7 @@ A RuneLite plugin for daily OSRS Farming tree runs toward a goal, such as 99 Far
 ## Build and run
 
 - Java 11+, Gradle. Built against RuneLite `latest.release`, currently 1.13.4, with Lombok.
-- `./gradlew build`: compiles and runs the unit tests in `src/test/java/.../core`, plus `RunStateTest`.
+- `./gradlew build`: compiles and runs the unit tests in `src/test/java/.../core` and `.../data`, plus `RunStateTest`.
 - `./gradlew runClient`: starts RuneLite with the plugin loaded in developer mode. Use this, not the test `main`, from IntelliJ.
 - `./gradlew panelSnapshot`: renders the side-panel tabs to `build/snapshots/tab-N.png` with sample data, no client needed. Use it to check UI changes visually.
 - `./gradlew exportPreviewData`: regenerates data for `preview/tree-running-preview.html`. That file is a clickable JS mock of the panel.
@@ -47,7 +47,9 @@ A RuneLite plugin for daily OSRS Farming tree runs toward a goal, such as 99 Far
 - A patch is identified by varbit **and** region, because varbits are reused, e.g. 4771.
 - Ticking only marks a patch done. Growth timers (`plantedAt`) and run XP are committed in `endRun()` when the user presses Finish run, or by the 12-hour stale auto-finish. Don't set `plantedAt` on tick, or the checkbox can't be unticked. Every ticked patch gets a `plantedAt`, so short crops (calquat 21 h, fruit trees 16 h) aren't shown as due before they can have grown.
 - `PatchMatcher` must not fall back to route order when the player's region has a patch of that type that's already done.
-- Settings saved as JSON strings in hidden config keys: `bankStops`, `stopOrder`, `patchOrder`, `travelText`; `bankFilter` is a hidden enum.
+- Settings saved as JSON strings in hidden config keys: `bankStops`, `stopOrder`, `patchOrder`, `travelText` (tree stops by `RouteStep` name, herb patches as `HERB_<HerbLocation>`); `bankFilter` is a hidden enum.
+- A grown herb or allotment patch steps through three states as it's picked, so a GROWN → GROWN change with XP is a pick. Changes in the first 2 ticks after arriving in an area are the area's varbits catching up, not actions.
+- Our own `state` saves fire ConfigChanged; `onConfigChanged` ignores that key.
 - A tree tick needs a real check-health (CHECK_HEALTH → anything else) or a planting (GROWING stage 0); raking (weeds) never ticks.
 - Prices come from `itemManager.getItemPriceWithSource(id, true)`, the Wiki live price.
 - Owner preference: for UI changes, show a clickable preview (update `preview/`) before changing the plugin.

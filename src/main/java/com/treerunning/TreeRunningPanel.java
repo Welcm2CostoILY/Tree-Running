@@ -108,6 +108,7 @@ class TreeRunningPanel extends PluginPanel
 	private Predicate<PatchLocation> patchEnabled = location -> true;
 	private RouteOrder routeOrder = RouteOrder.defaults();
 	private Map<RouteStep, String> travelNotes = new EnumMap<>(RouteStep.class);
+	private Map<HerbLocation, String> herbTravelNotes = new EnumMap<>(HerbLocation.class);
 	private final Timer travelSaveTimer;
 
 	TreeRunningPanel(TreeRunningPlugin plugin)
@@ -318,10 +319,12 @@ class TreeRunningPanel extends PluginPanel
 	/** Builds the route editor from the saved values. Called once at startup, on the Swing thread. */
 	void loadRouteEditor()
 	{
-		loadRouteEditor(plugin.getBankStops(), plugin.getRouteOrder(), plugin.getTravelNotes(), plugin::isPatchEnabled);
+		loadRouteEditor(plugin.getBankStops(), plugin.getRouteOrder(), plugin.getTravelNotes(), plugin.getHerbTravelNotes(),
+			plugin::isPatchEnabled, plugin::isHerbEnabled);
 	}
 
-	void loadRouteEditor(List<BankStop> stops, RouteOrder order, Map<RouteStep, String> travel, Predicate<PatchLocation> patchEnabled)
+	void loadRouteEditor(List<BankStop> stops, RouteOrder order, Map<RouteStep, String> travel, Map<HerbLocation, String> herbTravel,
+		Predicate<PatchLocation> patchEnabled, Predicate<HerbLocation> herbEnabled)
 	{
 		loading = true;
 		try
@@ -330,6 +333,8 @@ class TreeRunningPanel extends PluginPanel
 			this.routeOrder = order;
 			this.travelNotes = new EnumMap<>(RouteStep.class);
 			this.travelNotes.putAll(travel);
+			this.herbTravelNotes = new EnumMap<>(HerbLocation.class);
+			this.herbTravelNotes.putAll(herbTravel);
 			settingsPanel.removeAll();
 			settingsPanel.setBorder(BorderFactory.createCompoundBorder(
 				BorderFactory.createMatteBorder(1, 0, 0, 0, ColorScheme.MEDIUM_GRAY_COLOR), new EmptyBorder(8, 0, 0, 0)));
@@ -343,6 +348,31 @@ class TreeRunningPanel extends PluginPanel
 			bankStops = new ArrayList<>(stops);
 			buildRoute();
 			settingsPanel.add(routePanel);
+
+			settingsPanel.add(section("Herb run travel"));
+			settingsPanel.add(text("The travel note shown for each herb patch. Type your own; empty hides it. Herb patches "
+				+ "that are off in the settings are greyed out.", MUTED));
+			for (HerbLocation location : HerbLocation.values())
+			{
+				boolean on = herbEnabled.test(location);
+				JLabel name = small(location.getDisplayName() + (on ? "" : " (off in settings)"), on ? ColorScheme.BRAND_ORANGE : MUTED);
+				name.setBorder(new EmptyBorder(4, 0, 1, 0));
+				name.setAlignmentX(LEFT_ALIGNMENT);
+				settingsPanel.add(name);
+				settingsPanel.add(travelField(location.getTravel(),
+					herbTravelNotes.containsKey(location) ? herbTravelNotes.get(location) : location.getTravel(),
+					text ->
+					{
+						if (text.equals(location.getTravel()))
+						{
+							herbTravelNotes.remove(location);
+						}
+						else
+						{
+							herbTravelNotes.put(location, text);
+						}
+					}));
+			}
 		}
 		finally
 		{
@@ -372,7 +402,18 @@ class TreeRunningPanel extends PluginPanel
 			routePanel.add(withArrows(head, s > 0, s < stops.size() - 1,
 				() -> moveRoute(routeOrder.moveStop(step, -1)), () -> moveRoute(routeOrder.moveStop(step, 1)),
 				"stop"));
-			routePanel.add(travelField(step));
+			routePanel.add(travelField(step.getTravel(), travelNotes.containsKey(step) ? travelNotes.get(step) : step.getTravel(),
+				text ->
+				{
+					if (text.equals(step.getTravel()))
+					{
+						travelNotes.remove(step);
+					}
+					else
+					{
+						travelNotes.put(step, text);
+					}
+				}));
 
 			addBankEditors(step, true);
 			for (int p = 0; p < locations.size(); p++)
@@ -441,27 +482,18 @@ class TreeRunningPanel extends PluginPanel
 		return row;
 	}
 
-	/** The travel note for a stop, editable. Empty hides it. */
-	private JComponent travelField(RouteStep step)
+	/** An editable travel note. Empty hides it; typing the built-in text back restores the default. */
+	private JComponent travelField(String builtIn, String current, java.util.function.Consumer<String> onChange)
 	{
-		String current = travelNotes.containsKey(step) ? travelNotes.get(step) : step.getTravel();
 		JTextField field = new JTextField(current);
 		styleInput(field);
 		field.setForeground(ColorScheme.LIGHT_GRAY_COLOR);
-		field.setToolTipText("How you get here. Built-in: " + step.getTravel());
+		field.setToolTipText("How you get here. Built-in: " + builtIn);
 		field.getDocument().addDocumentListener(new DocumentListener()
 		{
 			private void changed()
 			{
-				String text = field.getText();
-				if (text.equals(step.getTravel()))
-				{
-					travelNotes.remove(step);
-				}
-				else
-				{
-					travelNotes.put(step, text);
-				}
+				onChange.accept(field.getText());
 				if (!loading)
 				{
 					travelSaveTimer.restart();
@@ -496,7 +528,7 @@ class TreeRunningPanel extends PluginPanel
 		if (!loading)
 		{
 			travelSaveTimer.stop();
-			plugin.saveTravelNotes(travelNotes);
+			plugin.saveTravelNotes(travelNotes, herbTravelNotes);
 		}
 	}
 
@@ -698,7 +730,9 @@ class TreeRunningPanel extends PluginPanel
 				RunTask task = item.getTask();
 				String note = !task.isDue() && task.getNote() != null && task.getNote().startsWith("Ready")
 					? " (" + task.getNote() + ")" : "";
-				String state = stateLabel(d.seen.get(key), now);
+				SeenPatch seenPatch = d.seen.get(key);
+				Long planted = d.plantedAt.get(key);
+				String state = seenPatch != null && (planted == null || seenPatch.seenAt >= planted) ? stateLabel(seenPatch, now) : "";
 				String pay = d.done.contains(key) && task.getCrop().getPayment() != null && task.getLocation().getGardener() >= 0
 					? (d.paid.contains(key) ? " · paid" : " · not paid") : "";
 				box = checkBox(patchLabel(task) + note + state + pay, d.done.contains(key));
@@ -800,6 +834,7 @@ class TreeRunningPanel extends PluginPanel
 		long now = System.currentTimeMillis();
 		int herbPatches = 0;
 		int ready = 0;
+		int unseen = 0;
 		long nextGrown = 0;
 		String nextName = null;
 		long allGrown = 0;
@@ -810,7 +845,11 @@ class TreeRunningPanel extends PluginPanel
 				continue;
 			}
 			herbPatches++;
-			if (task.isDue())
+			if (task.getCondition() == PatchCondition.UNKNOWN)
+			{
+				unseen++;
+			}
+			else if (task.isDue())
 			{
 				ready++;
 			}
@@ -826,7 +865,7 @@ class TreeRunningPanel extends PluginPanel
 		}
 		herbTab.add(heading(d.herbActive
 			? "Herb run in progress: " + d.herbPlantedCount() + "/" + d.herbDueCount()
-			: ready + " of " + herbPatches + " herb patches ready"));
+			: ready + " of " + herbPatches + " herb patches ready" + (unseen > 0 ? ", " + unseen + " not seen yet" : "")));
 		if (nextName != null)
 		{
 			herbTab.add(text("Next grown: " + nextName + " in " + duration(nextGrown - now) + ". All grown in "
@@ -844,6 +883,10 @@ class TreeRunningPanel extends PluginPanel
 			herbTab.add(text("Last: " + d.herbLastMatch, GOOD));
 		}
 
+		// Needs, at the top like the Trees tab
+		herbTab.add(Box.createVerticalStrut(4));
+		herbTab.add(herbNeedsBox(d));
+
 		// Patches
 		herbTab.add(section("Patches"));
 		for (HerbTask task : d.herbTasks)
@@ -852,10 +895,6 @@ class TreeRunningPanel extends PluginPanel
 		}
 		herbTab.add(text("DF is disease-free. Choose each patch's herb in the settings, so your most valuable seeds go in "
 			+ "the DF patches.", MUTED));
-
-		// Needs
-		herbTab.add(section("This run needs"));
-		herbTab.add(herbNeedsBox(d));
 
 		// Checklist
 		herbTab.add(section("Run checklist"));
@@ -876,7 +915,11 @@ class TreeRunningPanel extends PluginPanel
 				loc.setForeground(ColorScheme.BRAND_ORANGE);
 				herbTab.add(Box.createVerticalStrut(4));
 				herbTab.add(loc);
-				herbTab.add(text(current.getTravel(), MUTED));
+				String travel = d.travelNote(current);
+				if (!travel.trim().isEmpty())
+				{
+					herbTab.add(text(travel, MUTED));
+				}
 			}
 			if (task.isAllotment())
 			{

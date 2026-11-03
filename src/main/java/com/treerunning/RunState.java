@@ -15,6 +15,11 @@ import java.util.Set;
  */
 class RunState
 {
+	/** More than any real run could reach; history entries beyond these are errors. */
+	static final int MAX_HERB_RUN_PICKS = 1_000;
+	static final int MAX_HERB_RUN_XP = 200_000;
+	static final int MAX_TREE_RUN_XP = 1_000_000;
+
 	/** True from the first patch of a run until you press Finish run. */
 	boolean active;
 	/** Farming XP at the start of the current run. */
@@ -58,6 +63,10 @@ class RunState
 	int herbPicked;
 	long herbValue;
 	long herbCost;
+	long herbSeedCost;
+	long herbCompostCost;
+	/** Seeds planted on the current herb run, by name. */
+	Map<String, Integer> herbSeeds = new java.util.LinkedHashMap<>();
 	int herbXp;
 	List<RunRecord> herbRuns = new ArrayList<>();
 	/** The "all grown" time already notified about, so it's only sent once. */
@@ -113,6 +122,14 @@ class RunState
 		{
 			herbRuns = new ArrayList<>();
 		}
+		if (herbSeeds == null)
+		{
+			herbSeeds = new java.util.LinkedHashMap<>();
+		}
+		// Runs saved by a version that read all your XP at login as one action: no run picks
+		// thousands of herbs or gains this much XP.
+		herbRuns.removeIf(r -> r == null || r.picked > MAX_HERB_RUN_PICKS || r.xp > MAX_HERB_RUN_XP);
+		runs.removeIf(r -> r == null || r.xp > MAX_TREE_RUN_XP);
 		if (bank == null)
 		{
 			bank = new HashMap<>();

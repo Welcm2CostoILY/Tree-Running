@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;600;700&family=Atkinson+Hyperlegible:wght@400;700&display=swap">
 <style>
-/* A mock of the RuneLite side panel with the proposed Herbs tab, plus demo controls. */
+/* Mock of the RuneLite side panel: the Herbs tab and the XP tab's profit section, with demo controls. */
 :root {
   color-scheme: dark;
   --page: #141414;
@@ -35,11 +35,8 @@ body { margin: 0; background: var(--page); color: var(--text); font-family: var(
 h1 { font-size: 22px; color: var(--white); margin: 0 0 6px; }
 .intro { max-width: 1120px; margin: 0 auto 18px; line-height: 1.5; }
 .intro p { margin: 4px 0; }
-.layout { max-width: 1120px; margin: 0 auto; display: grid; gap: 18px;
-  grid-template-columns: 300px minmax(0, 1fr); align-items: start; }
+.layout { max-width: 1120px; margin: 0 auto; display: grid; gap: 18px; grid-template-columns: 300px minmax(0, 1fr); align-items: start; }
 @media (max-width: 820px) { .layout { grid-template-columns: minmax(0, 1fr); } }
-
-/* ---------- RuneLite panel ---------- */
 .rl { background: var(--panel); border: 1px solid var(--line); border-radius: 4px; font-family: var(--font-game); font-size: 13px; max-width: 300px; }
 .tabs { display: flex; border-bottom: 1px solid var(--line); }
 .tabs button { flex: 1; font: 600 12px var(--font-game); color: var(--muted); background: var(--panel-2); border: 0; border-right: 1px solid var(--line); padding: 7px 2px; cursor: pointer; }
@@ -47,73 +44,61 @@ h1 { font-size: 22px; color: var(--white); margin: 0 0 6px; }
 .tabs button[aria-selected="true"] { color: var(--white); background: var(--panel); box-shadow: inset 0 -2px 0 var(--orange); }
 .tab { padding: 10px; display: none; }
 .tab.on { display: block; }
-.h { color: var(--white); font-weight: 700; margin: 2px 0 6px; }
+.h { color: var(--white); font-weight: 700; margin: 2px 0 4px; }
 .sec { color: var(--orange); font-weight: 700; margin: 14px 0 5px; }
 .muted { color: var(--muted); font-size: 12px; line-height: 1.4; }
-.row { display: flex; justify-content: space-between; gap: 6px; align-items: baseline; margin: 2px 0; }
-.row .v { color: var(--white); text-align: right; }
+.row { display: flex; justify-content: space-between; gap: 6px; align-items: baseline; margin: 2px 0; font-size: 12.5px; }
+.row .v { color: var(--white); text-align: right; white-space: nowrap; }
+.pos { color: var(--good) !important; }
+.neg { color: var(--bad) !important; }
 .btns { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin: 6px 0; }
 .btn { font: 600 12px var(--font-game); color: var(--white); background: #3a3a3a; border: 1px solid #4a4a4a; padding: 5px; cursor: pointer; }
 .btn:disabled { color: #666; cursor: default; }
-.big { font-size: 20px; font-weight: 700; color: var(--good); }
-/* patch board */
-.board { display: grid; gap: 3px; }
-.patch { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 6px; padding: 4px 5px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 3px; }
-.patch .name { color: var(--white); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.patch .name .df { color: var(--blue); font-size: 10px; font-weight: 700; margin-left: 3px; border: 1px solid #3c6a8a; border-radius: 2px; padding: 0 2px; }
-.chip { font-size: 11px; font-weight: 700; padding: 1px 5px; border-radius: 2px; white-space: nowrap; }
-.chip.ready { background: #2b4a22; color: var(--good); }
-.chip.growing { background: #3a3523; color: var(--warn); }
-.chip.diseased { background: #43213c; color: #e48ad7; }
-.chip.dead, .chip.empty { background: #4a2420; color: var(--bad); }
-.chip.off { background: #333; color: var(--muted); }
-.patch select { grid-column: 1 / -1; width: 100%; font: 12px var(--font-game); background: #1a1a1a; color: var(--text); border: 1px solid var(--line); padding: 2px; }
-.patch .sub { grid-column: 1 / -1; font-size: 11px; color: var(--muted); display: flex; justify-content: space-between; gap: 6px; }
-/* checklist */
+label.cb { display: flex; gap: 6px; align-items: flex-start; margin: 3px 0; color: var(--white); cursor: pointer; font-size: 12.5px; }
+.box { background: var(--panel-2); border: 1px solid var(--line); border-radius: 3px; padding: 6px; margin-top: 6px; }
+.box .title { display: flex; justify-content: space-between; color: var(--white); font-weight: 700; margin-bottom: 3px; }
+.need { display: grid; grid-template-columns: 40px 1fr; gap: 6px; font-size: 12px; margin: 1px 0; }
+.need .n { text-align: right; color: var(--white); }
+.card { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 1px 6px; padding: 4px 6px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 3px; margin-bottom: 3px; }
+.card.allot { margin-left: 12px; }
+.card .name { color: var(--white); font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.card .df { color: var(--blue); font-size: 10px; margin-left: 3px; }
+.card .sub { font-size: 11.5px; color: var(--herb); }
+.card.allot .sub { color: var(--text); }
+.chip { font-weight: 700; font-size: 12px; align-self: center; grid-row: 1 / span 2; grid-column: 2; }
+.c-ready { color: var(--good); } .c-grow { color: var(--warn); } .c-bad { color: var(--bad); } .c-unk { color: var(--muted); }
 .stop { margin-top: 8px; }
 .stop .loc { color: var(--orange); font-weight: 700; }
 .stop .travel { color: var(--muted); font-size: 12px; }
+.stop .sub { color: var(--text); font-size: 12px; margin: 3px 0 0 2px; }
 .check { display: flex; gap: 6px; align-items: center; margin: 2px 0 2px 2px; color: var(--white); font-size: 12.5px; cursor: pointer; }
-.check.done { color: var(--muted); text-decoration: line-through; }
-.check.skip { color: var(--muted); font-style: italic; }
-.check input { margin: 0; }
-/* needs box */
-.box { background: var(--panel-2); border: 1px solid var(--line); border-radius: 3px; padding: 6px; margin-top: 6px; }
-.box .title { display: flex; justify-content: space-between; color: var(--white); font-weight: 700; margin-bottom: 3px; }
-.need { display: grid; grid-template-columns: 46px 1fr; gap: 6px; font-size: 12px; margin: 1px 0; }
-.need .n { text-align: right; color: var(--white); }
-.need .n.short { color: var(--bad); }
-.warnline { color: var(--bad); font-size: 12px; margin-top: 4px; }
-.okline { color: var(--good); font-size: 12px; margin-top: 4px; }
-/* tables */
-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.check.done { color: var(--muted); }
+table { width: 100%; border-collapse: collapse; font-size: 11.5px; }
 th { text-align: right; color: var(--muted); font-weight: 600; padding: 2px 2px; border-bottom: 1px solid var(--line); }
 th:first-child, td:first-child { text-align: left; }
-td { text-align: right; padding: 2px 2px; color: var(--white); }
-td.neg { color: var(--bad); }
-td.pos { color: var(--good); }
-.hist { display: grid; grid-template-columns: 1fr auto auto; gap: 2px 6px; font-size: 12px; align-items: center; }
-.hist .x { font: 11px var(--font-game); background: #3a3a3a; color: var(--white); border: 1px solid #4a4a4a; padding: 0 4px; cursor: pointer; }
-label.cb { display: flex; gap: 6px; align-items: flex-start; margin: 4px 0; color: var(--white); cursor: pointer; }
-select.full { width: 100%; font: 12px var(--font-game); background: #1a1a1a; color: var(--text); border: 1px solid var(--line); padding: 3px; }
-.treestop { background: var(--panel-2); border: 1px dashed var(--line); padding: 6px; margin-top: 6px; border-radius: 3px; }
-/* right side */
+td { text-align: right; padding: 2px 2px; color: var(--white); white-space: nowrap; }
+.hist { font-size: 12px; }
+.hist .item { display: grid; grid-template-columns: 1fr auto; gap: 0 6px; padding: 3px 0; border-bottom: 1px solid #333; }
+.hist .item .x { grid-row: 1 / span 2; grid-column: 2; align-self: center; font: 11px var(--font-game); background: #3a3a3a; color: var(--white); border: 1px solid #4a4a4a; padding: 0 4px; cursor: pointer; }
+.hist .when { color: var(--text); }
+.hist .detail { color: var(--muted); font-size: 11.5px; }
 .side { line-height: 1.55; }
-.card { background: #1b1b1b; border: 1px solid var(--line); border-radius: 6px; padding: 12px 14px; margin-bottom: 14px; }
-.card h2 { font-size: 16px; color: var(--white); margin: 0 0 6px; }
-.card ul { margin: 4px 0 0 18px; padding: 0; }
-.card li { margin: 2px 0; }
+.panelcard { background: #1b1b1b; border: 1px solid var(--line); border-radius: 6px; padding: 12px 14px; margin-bottom: 14px; }
+.panelcard h2 { font-size: 16px; color: var(--white); margin: 0 0 6px; }
+.panelcard ul { margin: 4px 0 0 18px; padding: 0; }
+.panelcard li { margin: 3px 0; }
 .demo { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
 .demo button { font: 600 13px var(--font-ui); color: var(--white); background: #333; border: 1px solid #555; border-radius: 4px; padding: 7px 10px; cursor: pointer; }
-.demo button:hover { background: #3d3d3d; }
+.demo button[aria-pressed="true"] { border-color: var(--good); color: var(--good); }
 .small { font-size: 12.5px; color: var(--muted); }
+.bad-entry { background: rgba(224, 108, 90, 0.12); }
 </style>
 </head>
 <body>
 <div class="intro">
-  <h1>Herbs tab: preview</h1>
-  <p>A mock of the side panel with the new <b>Herbs</b> tab. Choose a herb for each patch, then use the demo buttons on the right to play through a run.</p>
-  <p class="small">Prices, yields and XP here are sample numbers. The plugin will use live OSRS Wiki prices, the Wiki's XP table and your actual bonuses.</p>
+  <h1>Herbs: preview of the fixes</h1>
+  <p>A mock of the side panel. Use the demo buttons to play through a herb run and to see the 274M entry before and after the fix.</p>
+  <p class="small">Prices are sample numbers. The plugin uses live OSRS Wiki prices.</p>
 </div>
 
 <div class="layout">
@@ -127,342 +112,318 @@ select.full { width: 100%; font: 12px var(--font-game); background: #1a1a1a; col
 
     <div class="tab" id="tab-xp">
       <div class="h">Level 90 → 99</div>
-      <div class="big" id="xpRuns"></div>
-      <div class="muted" id="xpRunsSub"></div>
-      <div class="row"><span>Trees only</span><span class="v">45 days</span></div>
-      <div class="row"><span>Herb runs per day</span><span class="v" id="xpHerbRuns">4</span></div>
-      <div class="row"><span>Herb XP per run</span><span class="v" id="xpHerbPer"></span></div>
-      <div class="muted" style="margin-top:6px">The goal date counts herb runs too, at the herb runs per day you set.</div>
-      <div class="sec">Settings: Herb runs</div>
-      <div class="row"><span>Herb runs per day</span>
-        <select id="herbRunsPerDay" class="full" style="width:auto"><option>0</option><option>1</option><option>2</option><option>3</option><option selected>4</option><option>6</option></select></div>
-      <div class="row"><span>Compost</span>
-        <select id="compost" class="full" style="width:auto"><option value="bottomless" selected>Bottomless bucket</option><option value="ultra">Ultracompost</option><option value="super">Supercompost</option></select></div>
-      <label class="cb"><input type="checkbox" id="notifyBox" checked> Notify when my herb patches are grown</label>
-      <label class="cb"><input type="checkbox" id="onTheWay"> Herbs on the way: add grown herb patches to tree-run stops</label>
-      <div class="muted">Off by default. When on, the tree run's Farming Guild, Catherby and Falador stops get a herb line when that patch is grown.</div>
-      <div class="treestop" id="treeStopDemo" hidden>
-        <div class="stop" style="margin-top:0"><div class="loc">Catherby</div><div class="travel">Portal nexus → Catherby, run to beach</div>
-        <label class="check"><input type="checkbox"> Papaya</label>
-        <label class="check" style="color:var(--herb)"><input type="checkbox"> Herb: Ranarr (grown)</label></div>
-      </div>
-      <div class="sec">Herb patches</div>
-      <div id="patchToggles"></div>
+      <div class="sec">Profit</div>
+      <div id="xpProfit"></div>
+      <div class="muted" style="margin-top:4px">Herb runs: herbs and crops picked at live prices, minus the seeds you planted, compost and payments.</div>
+      <div class="sec">Herb run history</div>
+      <div class="hist" id="xpHist"></div>
     </div>
-
-    <div class="tab" id="tab-trees">
-      <div class="h">Run in progress: 6/19</div>
-      <div class="muted">This is the tree run tab from before, renamed from "Run". Nothing else changes.</div>
-    </div>
+    <div class="tab" id="tab-trees"><div class="muted">The Trees tab is unchanged.</div></div>
+    <div class="tab" id="tab-supplies"><div class="muted">The Supplies tab is unchanged.</div></div>
 
     <div class="tab on" id="tab-herbs">
-      <div class="h" id="herbHead"></div>
-      <div class="muted" id="herbSub"></div>
+      <div class="h" id="head"></div>
+      <div class="muted" id="sub"></div>
       <div class="btns"><button class="btn" id="newRun">New run</button><button class="btn" id="finishRun">Finish run</button></div>
-      <div class="okline" id="lastTicked" hidden></div>
+      <label class="cb"><input type="checkbox"> Filter bank to this run</label>
+      <div class="muted" id="last" style="color:var(--good)"></div>
+      <div class="box" id="needs"></div>
 
       <div class="sec">Patches</div>
-      <div class="board" id="board"></div>
-      <div class="muted" style="margin-top:4px"><span style="color:var(--blue);font-weight:700">DF</span> is disease-free. Pick a herb for each patch. Put your most valuable seeds in the DF patches.</div>
-
-      <div class="sec">This run needs</div>
-      <div class="box" id="needs"></div>
+      <div id="board"></div>
+      <div class="muted">DF is disease-free. Each location shows its herb patch and, if you turned them on, its allotments as one entry.</div>
 
       <div class="sec">Run checklist</div>
       <div id="checklist"></div>
 
       <div class="sec">Profit: this run</div>
-      <div id="profitNow"></div>
+      <div id="profit"></div>
 
-      <div class="sec">Run history</div>
-      <div class="hist" id="history"></div>
-      <button class="btn" style="width:100%;margin-top:6px" id="clearHist">Clear all history</button>
+      <div class="sec">Herb run history</div>
+      <div class="hist" id="hist"></div>
 
       <div class="sec">Which herb pays best</div>
-      <div class="muted" style="margin-bottom:4px">Per patch, after the seed and compost, with your bonuses.</div>
-      <table id="picker"><thead><tr><th>Herb</th><th>Lvl</th><th>Profit</th><th>XP</th></tr></thead><tbody></tbody></table>
-    </div>
-
-    <div class="tab" id="tab-supplies">
-      <div class="h">Supplies</div>
-      <div class="muted">Herb seeds join the supply list here, against your bank and seed vault, with live prices.</div>
+      <div class="muted" style="margin-bottom:4px" id="pickerNote"></div>
+      <table id="picker"><thead><tr><th>Herb</th><th>Value</th><th>Seed</th><th>Profit</th><th>XP</th></tr></thead><tbody></tbody></table>
     </div>
   </div>
 
   <div class="side">
-    <div class="card">
+    <div class="panelcard">
       <h2>Play through a run</h2>
       <div class="demo">
-        <button id="demoTick">Do next step</button>
-        <button id="demoTime">Wait 20 minutes</button>
-        <button id="demoDisease">Make Falador diseased</button>
-        <button id="demoSecateurs">Toggle magic secateurs</button>
+        <button id="demoStep">Do next step</button>
+        <button id="demoFinish">Finish run</button>
+        <button id="demoBug" aria-pressed="false">Show the 274M entry (before the fix)</button>
       </div>
-      <p class="small" id="demoNote">Steps tick themselves in game when you harvest, compost and plant. Here, "Do next step" stands in for that.</p>
+      <p class="small" id="note">In game, steps tick themselves as you pick, compost and plant. "Do next step" stands in for that.</p>
     </div>
-    <div class="card">
-      <h2>What's in it</h2>
-      <ul>
-        <li><b>Patches:</b> every herb patch shows whether it's ready, growing (with time left), diseased, dead or empty. It shows when you last saw it and whether it's composted.</li>
-        <li><b>A herb for each patch:</b> each patch has its own herb, so your best seeds can go in the disease-free patches. "This run needs" adds up the seeds.</li>
-        <li><b>Checklist:</b> harvest, compost and plant at each stop, in your route order, ticking themselves.</li>
-        <li><b>Needs:</b> seeds, compost, tools and teleports, against your inventory. It warns when your magic secateurs aren't with you.</li>
-        <li><b>Profit:</b> each run records the herbs picked at live prices, minus seeds and compost, along with XP. The history works like the tree run's, with delete.</li>
-        <li><b>Herbs on the way:</b> off by default. It's under Settings in the XP tab.</li>
-        <li><b>Notification:</b> a RuneLite notification when your herb patches are grown.</li>
-      </ul>
+    <div class="panelcard">
+      <h2>RuneLite settings: Herb runs</h2>
+      <label class="cb" style="font-family:var(--font-ui);font-size:14px"><input type="checkbox" id="ironBox"> Don't count seed costs (ironman)</label>
+      <p class="small">For accounts that can't buy seeds and get them from PvM and seed packs. Profit then counts only the harvest, minus compost and payments. "Which herb pays best" ranks herbs by what you pick. The seeds-planted count still shows, just without a price.</p>
     </div>
-    <div class="card">
-      <h2>Disease-free patches</h2>
+    <div class="panelcard">
+      <h2>What's changing</h2>
       <ul>
-        <li>Troll Stronghold: My Arm's Big Adventure</li>
-        <li>Weiss: Making Friends with My Arm</li>
-        <li>Harmony Island: elite Morytania diary</li>
-        <li>Hosidius: easy Kourend &amp; Kebos diary</li>
-        <li>Ortus Farm: Champion rank at the Fortis Colosseum</li>
+        <li><b>The 274M bug:</b> when you logged in, the plugin briefly read your Farming XP as 0. Your next XP update then looked like one huge gain of all your XP. If you were standing at a grown herb patch, that gain was counted as herbs picked. The fix:
+          <ul>
+            <li>It ignores the XP reading at login.</li>
+            <li>It never counts more than a few herbs from one XP drop.</li>
+            <li>It removes history entries with impossible numbers, so your lifetime profit is right again.</li>
+          </ul>
+          Use the third demo button to compare.</li>
+        <li><b>Seeds in profit:</b> each run's profit now lists the seeds you planted, how many and what they cost, beside the harvest value, compost and payments. "Which herb pays best" shows the seed cost as its own column. Ironman accounts can turn seed costs off with the setting above.</li>
+        <li><b>One allotment entry per location:</b> Hosidius, Catherby and the rest show a herb patch and an allotment entry, not North-east and South-west. The allotment checklist covers both patches together ("Plant 6 Snape grass seeds"), and it ticks once both are done.</li>
       </ul>
-      <p class="small">Untick any patch you can't use under Settings in the XP tab. The plugin can't read most of these unlocks for itself, so you set them once.</p>
     </div>
   </div>
 </div>
 
 <script>
 // ---------- sample data ----------
-// [name, level, plant XP, harvest XP per herb, seed price, grimy herb price]  (sample values)
 const HERBS = {
-  ranarr:     ["Ranarr", 32, 27, 30.5, 38000, 7400],
-  toadflax:   ["Toadflax", 38, 34, 38.5, 3000, 2500],
-  irit:       ["Irit", 44, 43, 48.5, 200, 900],
-  avantoe:    ["Avantoe", 50, 54.5, 61.5, 2500, 2800],
-  kwuarm:     ["Kwuarm", 56, 69, 78, 2000, 2400],
-  snapdragon: ["Snapdragon", 62, 87.5, 98.5, 60000, 9800],
-  cadantine:  ["Cadantine", 67, 106.5, 120, 1200, 1500],
-  lantadyme:  ["Lantadyme", 73, 134.5, 151.5, 2000, 1800],
-  dwarf:      ["Dwarf weed", 79, 170.5, 192, 1500, 1500],
-  torstol:    ["Torstol", 85, 199.5, 224.5, 55000, 7500]
+  ranarr: { name: "Ranarr", seed: 38000, herb: 7400, plant: 27, harvest: 30.5 },
+  snapdragon: { name: "Snapdragon", seed: 60000, herb: 9800, plant: 87.5, harvest: 98.5 },
+  torstol: { name: "Torstol", seed: 55000, herb: 7500, plant: 199.5, harvest: 224.5 },
+  toadflax: { name: "Toadflax", seed: 3000, herb: 2500, plant: 34, harvest: 38.5 },
+  avantoe: { name: "Avantoe", seed: 2500, herb: 2800, plant: 54.5, harvest: 61.5 },
+  kwuarm: { name: "Kwuarm", seed: 2000, herb: 2400, plant: 69, harvest: 78 },
+  cadantine: { name: "Cadantine", seed: 1200, herb: 1500, plant: 106.5, harvest: 120 },
+  lantadyme: { name: "Lantadyme", seed: 2000, herb: 1800, plant: 134.5, harvest: 151.5 },
+  dwarf: { name: "Dwarf weed", seed: 1500, herb: 1500, plant: 170.5, harvest: 192 }
 };
-const COMPOST_COST = { bottomless: 300, ultra: 1200, super: 600 };
-// Expected herbs per patch with magic secateurs, diary bonus and the compost (sample).
-function yieldFor(patch) {
-  let y = state.compost === "super" ? 7.4 : 8.6;
-  if (!state.secateurs) y /= 1.1;
-  return y * (1 + (patch.bonus || 0));
-}
+const SNAPE = { name: "Snape grass", seed: 900, crop: 420, plant: 82, harvest: 82, seeds: 3 };
+const COMPOST = 600; // bottomless bucket: half a bucket of ultracompost per use
+const YIELD = 8.6, ALLOT_YIELD = 11;
 
-// The 10 herb patches in route order, with travel notes for a maxed house.
-const PATCHES = [
-  { id: "guild", name: "Farming Guild", travel: "Jewellery box → Farming Guild", bonus: 0.05, df: false, herb: "snapdragon" },
-  { id: "hosidius", name: "Hosidius", travel: "Portal nexus → Kourend Castle, run south-west", bonus: 0.05, df: true, herb: "torstol" },
-  { id: "ortus", name: "Ortus Farm", travel: "Quetzal → Civitas illa Fortis, run east", df: true, herb: "torstol" },
-  { id: "catherby", name: "Catherby", travel: "Portal nexus → Catherby", bonus: 0.10, df: false, herb: "ranarr" },
-  { id: "ardougne", name: "Ardougne", travel: "Ardougne cloak → Ardougne farm", df: false, herb: "ranarr" },
-  { id: "falador", name: "Falador", travel: "Explorer's ring → cabbage patch, run north", df: false, herb: "ranarr" },
-  { id: "morytania", name: "Port Phasmatys", travel: "Fairy ring ALQ, run west", df: false, herb: "ranarr" },
-  { id: "harmony", name: "Harmony Island", travel: "Harmony Island teleport", df: true, herb: "snapdragon", off: true },
-  { id: "troll", name: "Troll Stronghold", travel: "Stronghold teleport, climb to the roof", df: true, herb: "snapdragon" },
-  { id: "weiss", name: "Weiss", travel: "Icy basalt → Weiss", df: true, herb: "snapdragon" }
+// Locations: herb patch, plus allotments where turned on.
+const LOCS = [
+  { id: "guild", name: "Farming Guild", travel: "Jewellery box → Farming Guild", herb: "snapdragon", allot: false, state: "ready" },
+  { id: "hosidius", name: "Hosidius", travel: "Portal nexus → Kourend Castle, run south-west", herb: "torstol", df: true, allot: true, state: "ready", allotState: "ready" },
+  { id: "catherby", name: "Catherby", travel: "Portal nexus → Catherby", herb: "ranarr", allot: true, state: "ready", allotState: "growing" },
+  { id: "ardougne", name: "Ardougne", travel: "Ardougne cloak → Ardougne farm", herb: "ranarr", allot: false, state: "ready" },
+  { id: "falador", name: "Falador", travel: "Explorer's ring → cabbage patch, run north", herb: "ranarr", allot: false, state: "diseased" },
+  { id: "troll", name: "Troll Stronghold", travel: "Stronghold teleport, climb to the roof", herb: "snapdragon", df: true, allot: false, state: "ready" },
+  { id: "weiss", name: "Weiss", travel: "Icy basalt → Weiss", herb: "snapdragon", df: true, allot: false, state: "growing" }
 ];
-// Patch states: minutes left to grow (0 = ready).
-const START = { guild: 0, hosidius: 0, ortus: 0, catherby: 0, ardougne: 0, falador: 0, morytania: 8, harmony: 0, troll: 0, weiss: 14 };
 
-const state = {
-  left: { ...START }, status: {}, steps: {}, active: false, secateurs: true, compost: "bottomless",
-  picked: 0, value: 0, costs: 0, xp: 0, lastTicked: null, onTheWay: false, notify: true, runsPerDay: 4,
+const state = { iron: false, done: new Set(), active: false, picked: 0, value: 0, seeds: {}, compost: 0, xp: 0, last: "", bug: false,
   history: [
-    { when: "Nov 2, 19:40", profit: 152300, xp: 6110, herbs: 64 },
-    { when: "Nov 2, 17:55", profit: 147950, xp: 5980, herbs: 61 },
-    { when: "Nov 1, 21:10", profit: 161200, xp: 6250, herbs: 66 }
+    { when: "Nov 3, 06:12", time: "9m 40s", xp: 6020, picked: 63, value: 498000, seeds: 352000, compost: 4800, payments: 0 },
+    { when: "Nov 2, 21:30", time: "8m 55s", xp: 6110, picked: 64, value: 512000, seeds: 356000, compost: 4800, payments: 0 }
   ]
 };
-for (const p of PATCHES) state.status[p.id] = state.left[p.id] > 0 ? "growing" : "ready";
+const BAD = { when: "Nov 3, 07:05", time: "0m 02s", xp: 5300000, picked: 173770, value: 274000000, seeds: 0, compost: 0, payments: 0, bad: true };
 
 const fmt = n => Math.round(n).toLocaleString("en-US");
-const gp = n => (n < 0 ? "−" : "") + (Math.abs(n) >= 1e6 ? (Math.abs(n) / 1e6).toFixed(2) + "M" : Math.abs(n) >= 1e4 ? Math.round(Math.abs(n) / 1000) + "k" : fmt(Math.abs(n)));
-const enabled = () => PATCHES.filter(p => !p.off);
+const gp = n => (n > 0 ? "+" : n < 0 ? "−" : "") + compact(Math.abs(n));
+function compact(n) { return n >= 1e6 ? (n / 1e6).toFixed(n >= 1e8 ? 0 : 1) + "M" : n >= 1e4 ? Math.round(n / 1000) + "k" : fmt(n); }
 
-// Steps at a patch depend on its state.
-function stepsFor(p) {
-  const h = HERBS[p.herb][0];
-  const st = state.status[p.id];
-  if (st === "diseased") return [["cure", "Cure (plant cure) or clear"], ["compost", "Compost"], ["plant", "Plant " + h]];
-  if (st === "dead" || st === "empty") return [["clear", "Clear the patch"], ["compost", "Compost"], ["plant", "Plant " + h]];
-  return [["harvest", "Harvest"], ["compost", "Compost"], ["plant", "Plant " + h]];
+// Steps for a location's herb patch and its allotments (both together).
+function herbSteps(l) {
+  const h = HERBS[l.herb].name;
+  const first = l.state === "diseased" ? ["cure", "Cure it (plant cure) or clear it"] : ["harvest", "Harvest " + h];
+  return [first, ["compost", "Compost"], ["plant", "Plant " + h]];
 }
-const dueNow = () => enabled().filter(p => state.status[p.id] !== "growing");
-function profitPerPatch(key, p) {
-  const [, , plant, harvest, seed, herb] = HERBS[key];
-  const y = yieldFor(p || { bonus: 0 });
-  return { profit: y * herb - seed - COMPOST_COST[state.compost], xp: plant + y * harvest };
+function allotSteps() {
+  return [["harvest", "Harvest both allotments"], ["compost", "Compost both"], ["plant", "Plant " + (SNAPE.seeds * 2) + " " + SNAPE.name + " seeds"]];
 }
+const due = () => LOCS.filter(l => l.state !== "growing");
+const allotDue = l => l.allot && l.allotState !== "growing";
 
-// ---------- render ----------
 function render() {
-  const en = enabled();
-  const ready = en.filter(p => state.status[p.id] === "ready").length;
-  const growing = en.filter(p => state.status[p.id] === "growing");
-  const soonest = growing.length ? Math.min(...growing.map(p => state.left[p.id])) : 0;
-  document.getElementById("herbHead").textContent = state.active
-    ? `Herb run in progress: ${doneCount()}/${dueNow().length} patches`
-    : `${ready} of ${en.length} herb patches ready`;
-  document.getElementById("herbSub").textContent = growing.length
-    ? `Next grown: ${growing.find(p => state.left[p.id] === soonest).name} in ${soonest}m. All grown in ${Math.max(...growing.map(p => state.left[p.id]))}m.`
-    : "Every patch is grown.";
+  const herbCount = LOCS.length, ready = LOCS.filter(l => l.state !== "growing").length;
+  document.getElementById("head").textContent = state.active
+    ? `Herb run in progress: ${planted()}/${due().length}`
+    : `${ready} of ${herbCount} herb patches ready`;
+  document.getElementById("sub").textContent = "Next grown: Weiss in 29m. All grown in 29m.";
   document.getElementById("finishRun").disabled = !state.active;
-  const lt = document.getElementById("lastTicked");
-  lt.hidden = !state.lastTicked; lt.textContent = state.lastTicked ? "Last ticked: " + state.lastTicked : "";
-
-  // board
-  document.getElementById("board").innerHTML = PATCHES.map(p => {
-    const st = p.off ? "off" : state.status[p.id];
-    const chip = { ready: "Ready", growing: state.left[p.id] + "m", diseased: "Diseased", dead: "Dead", empty: "Empty", off: "Off" }[st];
-    const opts = Object.entries(HERBS).map(([k, v]) => `<option value="${k}" ${k === p.herb ? "selected" : ""}>${v[0]}</option>`).join("");
-    const pp = profitPerPatch(p.herb, p);
-    return `<div class="patch">
-      <span class="name">${p.name}${p.df ? '<span class="df">DF</span>' : ""}</span>
-      <span class="chip ${st}">${chip}</span>
-      <select data-patch="${p.id}" aria-label="Herb for ${p.name}" ${p.off ? "disabled" : ""}>${opts}</select>
-      <span class="sub"><span>${p.off ? "Turned off in settings" : "Seen 1h 22m ago · composted"}</span><span>${p.off ? "" : "≈ " + gp(pp.profit)}</span></span>
-    </div>`;
-  }).join("");
+  document.getElementById("last").textContent = state.last ? "Last: " + state.last : "";
 
   // needs
-  const need = {};
-  for (const p of dueNow()) {
-    if (isDone(p, "plant")) continue;
-    need[p.herb] = (need[p.herb] || 0) + 1;
-  }
-  const carried = { snapdragon: 3, torstol: 2, ranarr: 3 };
-  const lines = Object.entries(need).map(([k, n]) => {
-    const have = carried[k] || 0;
-    return `<div class="need"><span class="n ${have < n ? "short" : ""}">${have < n ? have + "/" + n : n}</span><span style="color:var(--herb)">${HERBS[k][0]} seed</span></div>`;
+  const seedNeed = {};
+  for (const l of due()) if (!state.done.has(l.id + "|plant")) seedNeed[l.herb] = (seedNeed[l.herb] || 0) + 1;
+  let allotSeeds = 0;
+  for (const l of LOCS) if (allotDue(l) && !state.done.has(l.id + ":allot|plant")) allotSeeds += SNAPE.seeds * 2;
+  const carried = { ranarr: 2, snapdragon: 2, torstol: 1 };
+  let shortN = 0;
+  const lines = Object.entries(seedNeed).map(([k, n]) => {
+    const have = carried[k] || 0, short = have < n; if (short) shortN++;
+    return `<div class="need"><span class="n ${short ? "neg" : ""}">${short ? have + "/" + n : n}</span><span style="color:var(--herb)">${HERBS[k].name} seed</span></div>`;
   });
-  const tools = [
-    [1, state.compost === "bottomless" ? "Bottomless compost bucket" : (state.compost === "ultra" ? "Ultracompost" : "Supercompost") + " ×" + Object.values(need).reduce((a, b) => a + b, 0)],
-    [1, "Spade"], [1, "Seed dibber"], [1, "Teleport crystal"]
-  ].map(([n, t]) => `<div class="need"><span class="n">${n}</span><span>${t}</span></div>`);
-  const short = Object.entries(need).filter(([k, n]) => (carried[k] || 0) < n).length;
-  document.getElementById("needs").innerHTML =
-    `<div class="title"><span>This run needs</span><span style="color:${short ? "var(--bad)" : "var(--muted)"};font-weight:600;font-size:12px">${short ? short + " short" : "All carried"}</span></div>`
-    + (lines.join("") || '<div class="muted">Nothing left to plant.</div>') + tools.join("")
-    + (state.secateurs ? '<div class="okline">Magic secateurs: carried (+10% herbs)</div>'
-                       : '<div class="warnline">Magic secateurs aren\'t with you: about 10% fewer herbs</div>');
+  if (allotSeeds) lines.push(`<div class="need"><span class="n">${allotSeeds}</span><span>${SNAPE.name} seed</span></div>`);
+  document.getElementById("needs").innerHTML = `<div class="title"><span>This run needs</span><span style="font-size:12px;font-weight:600;color:${shortN ? "var(--bad)" : "var(--muted)"}">${shortN ? shortN + " short" : "All carried"}</span></div>`
+    + (lines.join("") || '<div class="muted">Nothing left to plant.</div>')
+    + `<div class="need"><span class="n">1</span><span>Bottomless compost bucket (filled)</span></div>`
+    + `<div class="need"><span class="n">1</span><span>Spade, seed dibber</span></div>`
+    + `<div style="color:var(--good);font-size:12px;margin-top:3px">Magic secateurs: with you (+10% herbs)</div>`;
+
+  // board
+  document.getElementById("board").innerHTML = LOCS.map(l => {
+    const h = HERBS[l.herb];
+    const est = YIELD * h.herb - (state.iron ? 0 : h.seed) - COMPOST;
+    let out = `<div class="card"><span class="name">${l.name}${l.df ? '<span class="df">DF</span>' : ""}</span>${chip(l.state, l.id === "weiss" ? "29m" : "")}
+      <span class="sub">Herb patch: ${h.name} · ≈ ${gp(est)}</span></div>`;
+    if (l.allot) {
+      out += `<div class="card allot"><span class="name">${l.name} allotments</span>${chip(l.allotState, "22m")}
+        <span class="sub">2 patches: ${SNAPE.name}</span></div>`;
+    }
+    return out;
+  }).join("");
 
   // checklist
-  document.getElementById("checklist").innerHTML = dueNow().map(p => {
-    const steps = stepsFor(p).map(([k, label]) => {
-      const d = isDone(p, k);
-      return `<label class="check ${d ? "done" : ""}"><input type="checkbox" data-step="${p.id}:${k}" ${d ? "checked" : ""}> ${label}</label>`;
-    }).join("");
-    return `<div class="stop"><div class="loc">${p.name}${p.df ? ' <span style="color:var(--blue);font-size:11px">DF</span>' : ""}</div><div class="travel">${p.travel}</div>${steps}</div>`;
-  }).join("") + (growing.length ? `<div class="stop"><div class="muted">Still growing: ${growing.map(p => p.name + " (" + state.left[p.id] + "m)").join(", ")}</div></div>` : "");
+  let html = "";
+  for (const l of LOCS) {
+    const herbDue = l.state !== "growing", aDue = allotDue(l);
+    if (!herbDue && !aDue) continue;
+    html += `<div class="stop"><div class="loc">${l.name}${l.df ? ' <span style="color:var(--blue);font-size:11px">DF</span>' : ""}</div><div class="travel">${l.travel}</div>`;
+    if (herbDue) {
+      if (l.allot) html += `<div class="sub">Herb patch</div>`;
+      html += herbSteps(l).map(([k, label]) => check(l.id + "|" + k, label)).join("");
+    }
+    if (aDue) {
+      html += `<div class="sub">Allotments</div>` + allotSteps().map(([k, label]) => check(l.id + ":allot|" + k, label)).join("");
+    }
+    html += "</div>";
+  }
+  const growing = LOCS.filter(l => l.state === "growing").map(l => l.name + " (29m)")
+    .concat(LOCS.filter(l => l.allot && l.allotState === "growing").map(l => l.name + " allotments (22m)"));
+  html += `<div class="muted" style="margin-top:6px">Still growing: ${growing.join(", ")}</div>`;
+  document.getElementById("checklist").innerHTML = html;
 
-  // profit now
-  document.getElementById("profitNow").innerHTML = state.active || state.picked ? `
-    <div class="row"><span>Herbs picked</span><span class="v">${fmt(state.picked)}</span></div>
-    <div class="row"><span>Harvest value</span><span class="v">${gp(state.value)}</span></div>
-    <div class="row"><span>Seeds and compost</span><span class="v" style="color:var(--bad)">−${gp(state.costs)}</span></div>
-    <div class="row"><span>Profit</span><span class="v" style="color:${state.value - state.costs >= 0 ? "var(--good)" : "var(--bad)"}">${gp(state.value - state.costs)}</span></div>
+  // profit
+  const seedCost = state.iron ? 0 : Object.values(state.seeds).reduce((a, s) => a + s.n * s.each, 0);
+  const seedLines = Object.entries(state.seeds).map(([name, s]) =>
+    `<div class="row"><span>&nbsp;&nbsp;${s.n} × ${name} seed</span><span class="v ${state.iron ? "" : "neg"}">${state.iron ? "not counted" : "−" + compact(s.n * s.each)}</span></div>`).join("");
+  document.getElementById("profit").innerHTML = state.active || state.picked ? `
+    <div class="row"><span>Picked</span><span class="v">${fmt(state.picked)}</span></div>
+    <div class="row"><span>Harvest value</span><span class="v pos">+${compact(state.value)}</span></div>
+    <div class="row"><span>Seeds planted</span><span class="v ${state.iron ? "" : "neg"}">${state.iron ? "not counted" : "−" + compact(seedCost)}</span></div>${seedLines}
+    <div class="row"><span>Compost</span><span class="v neg">−${compact(state.compost)}</span></div>
+    <div class="row"><span><b>Profit</b></span><span class="v ${state.value - seedCost - state.compost >= 0 ? "pos" : "neg"}">${gp(state.value - seedCost - state.compost)}</span></div>
     <div class="row"><span>Farming XP</span><span class="v">${fmt(state.xp)}</span></div>`
-    : '<div class="muted">Starts when you harvest or plant the first patch.</div>';
+    : '<div class="muted">Starts when you harvest, compost or plant the first patch.</div>';
 
-  // history
-  document.getElementById("history").innerHTML = state.history.map((h, i) =>
-    `<span>${h.when}</span><span style="color:var(--good)">${gp(h.profit)} · ${fmt(h.xp)} XP</span><button class="x" data-del="${i}" title="Delete this run">✕</button>`
-  ).join("") || '<span class="muted">No finished runs yet.</span>';
-  const avg = state.history.length ? state.history.reduce((a, h) => a + h.profit, 0) / state.history.length : 0;
-  if (state.history.length) document.getElementById("history").insertAdjacentHTML("beforeend",
-    `<span class="muted">Average</span><span class="muted">${gp(avg)} a run</span><span></span>`);
+  // history (Herbs tab and XP tab)
+  const list = (state.bug ? [BAD] : []).concat(state.history);
+  const histHtml = list.map((h, i) => {
+    const profit = h.value - (state.iron ? 0 : h.seeds) - h.compost - h.payments;
+    return `<div class="item ${h.bad ? "bad-entry" : ""}"><span class="when">${h.when} · ${fmt(h.xp)} XP · ${h.time}</span>
+      <button class="x" data-del="${i}" title="Delete this run">✕</button>
+      <span class="detail">${gp(profit)} · ${fmt(h.picked)} picked${state.iron ? "" : " · seeds −" + compact(h.seeds)}</span></div>`;
+  }).join("") || '<div class="muted">No finished runs yet.</div>';
+  document.getElementById("hist").innerHTML = histHtml;
+  document.getElementById("xpHist").innerHTML = histHtml;
+
+  const lifetime = list.reduce((a, h) => a + h.value - (state.iron ? 0 : h.seeds) - h.compost - h.payments, 0);
+  const lastRun = list[0];
+  document.getElementById("xpProfit").innerHTML = `
+    <div class="row"><span>Lifetime</span><span class="v ${lifetime - 316000 >= 0 ? "pos" : "neg"}">${gp(lifetime - 316000)}</span></div>
+    <div class="row"><span>&nbsp;&nbsp;Herb runs</span><span class="v ${lifetime >= 0 ? "pos" : "neg"}">${gp(lifetime)}</span></div>
+    <div class="row"><span>&nbsp;&nbsp;Tree runs</span><span class="v neg">−316k</span></div>
+    <div class="row"><span>Last herb run</span><span class="v ${lastRun ? "pos" : ""}">${lastRun ? gp(lastRun.value - (state.iron ? 0 : lastRun.seeds) - lastRun.compost) : "–"}</span></div>
+    <div class="row"><span>Last tree run</span><span class="v neg">−316k</span></div>`;
 
   // picker
-  document.querySelector("#picker tbody").innerHTML = Object.entries(HERBS)
-    .map(([k, v]) => [k, v, profitPerPatch(k)])
-    .sort((a, b) => b[2].profit - a[2].profit)
-    .map(([k, v, pp]) => `<tr><td>${v[0]}</td><td>${v[1]}</td><td class="${pp.profit < 0 ? "neg" : "pos"}">${gp(pp.profit)}</td><td>${fmt(pp.xp)}</td></tr>`).join("");
-
-  // XP tab
-  const herbXp = en.reduce((a, p) => a + profitPerPatch(p.herb, p).xp, 0);
-  document.getElementById("xpHerbPer").textContent = fmt(herbXp);
-  const daily = 182047 + herbXp * state.runsPerDay;
-  document.getElementById("xpRuns").textContent = Math.ceil(8140136 / daily) + " days left";
-  document.getElementById("xpRunsSub").textContent = state.runsPerDay ? "With trees and herbs" : "Trees only";
-  document.getElementById("patchToggles").innerHTML = PATCHES.map(p =>
-    `<label class="cb"><input type="checkbox" data-toggle="${p.id}" ${p.off ? "" : "checked"}> ${p.name}${p.df ? ' <span style="color:var(--blue);font-size:11px">DF</span>' : ""}</label>`).join("");
-  document.getElementById("treeStopDemo").hidden = !state.onTheWay;
-  document.getElementById("onTheWay").checked = state.onTheWay;
+  document.getElementById("pickerNote").textContent = state.iron
+    ? "Per patch at live prices: the herbs you'd pick on average, minus compost. Seed costs are off (ironman)."
+    : "Per patch at live prices. Value is the herbs you'd pick on average; the seed is taken off it.";
+  document.querySelector("#picker tbody").innerHTML = Object.values(HERBS)
+    .map(h => ({ h, value: YIELD * h.herb, profit: YIELD * h.herb - (state.iron ? 0 : h.seed) - COMPOST, xp: h.plant + YIELD * h.harvest }))
+    .sort((a, b) => b.profit - a.profit)
+    .map(r => `<tr><td>${r.h.name}</td><td>${compact(r.value)}</td><td class="${state.iron ? "" : "neg"}">${state.iron ? "–" : "−" + compact(r.h.seed)}</td><td class="${r.profit >= 0 ? "pos" : "neg"}">${gp(r.profit)}</td><td>${fmt(r.xp)}</td></tr>`).join("");
 }
 
-const isDone = (p, k) => !!state.steps[p.id + ":" + k];
-function doneCount() { return dueNow().filter(p => isDone(p, "plant")).length; }
+function chip(s, mins) {
+  if (s === "growing") return `<span class="chip c-grow">${mins}</span>`;
+  if (s === "diseased") return `<span class="chip c-bad">Diseased</span>`;
+  return `<span class="chip c-ready">Ready</span>`;
+}
+function check(key, label) {
+  const d = state.done.has(key);
+  return `<label class="check ${d ? "done" : ""}"><input type="checkbox" data-step="${key}" ${d ? "checked" : ""}> ${label}</label>`;
+}
+function planted() {
+  return due().filter(l => state.done.has(l.id + "|plant")).length;
+}
 
-function doStep(p, k) {
-  if (!state.active) state.active = true;
-  state.steps[p.id + ":" + k] = true;
-  const [name, , plant, harvest, seed, herb] = HERBS[p.herb];
-  if (k === "harvest") {
-    const n = Math.round(yieldFor(p));
-    state.picked += n; state.value += n * herb; state.xp += n * harvest;
-    state.lastTicked = `Harvested ${n} herbs at ${p.name}`;
-  } else if (k === "compost") {
-    if (state.compost !== "bottomless") state.costs += COMPOST_COST[state.compost];
-    else state.costs += COMPOST_COST.bottomless;
-    state.lastTicked = `Composted ${p.name}`;
-  } else if (k === "plant") {
-    state.costs += seed; state.xp += plant;
-    state.lastTicked = `Planted ${name} at ${p.name}`;
+// Doing a step: picks, compost and planting change the run's profit.
+function doStep(key) {
+  state.active = true;
+  state.done.add(key);
+  const [where, step] = key.split("|");
+  const allot = where.endsWith(":allot");
+  const l = LOCS.find(x => x.id === where.replace(":allot", ""));
+  if (step === "harvest") {
+    if (allot) { const n = ALLOT_YIELD * 2; state.picked += n; state.value += n * SNAPE.crop; state.xp += n * SNAPE.harvest; state.last = `Picked ${n} ${SNAPE.name} at ${l.name}`; }
+    else { const h = HERBS[l.herb], n = 9; state.picked += n; state.value += n * h.herb; state.xp += n * h.harvest; state.last = `Picked ${n} ${h.name} at ${l.name}`; }
+  } else if (step === "compost") {
+    state.compost += allot ? COMPOST * 2 : COMPOST; state.last = "Composted " + l.name + (allot ? " allotments" : "");
+  } else if (step === "plant") {
+    if (allot) { addSeed(SNAPE.name, SNAPE.seeds * 2, SNAPE.seed); state.xp += SNAPE.plant * 2; state.last = `Planted ${SNAPE.seeds * 2} ${SNAPE.name} seeds at ${l.name}`; }
+    else { const h = HERBS[l.herb]; addSeed(h.name, 1, h.seed); state.xp += h.plant; state.last = `Planted ${h.name} at ${l.name}`; }
   } else {
-    state.lastTicked = `${p.name}: patch cleared`;
+    state.last = l.name + ": patch cleared";
   }
 }
+function addSeed(name, n, each) {
+  const s = state.seeds[name] || { n: 0, each };
+  s.n += n; state.seeds[name] = s;
+}
+function allKeys() {
+  const keys = [];
+  for (const l of LOCS) {
+    if (l.state !== "growing") for (const [k] of herbSteps(l)) keys.push(l.id + "|" + k);
+    if (allotDue(l)) for (const [k] of allotSteps()) keys.push(l.id + ":allot|" + k);
+  }
+  return keys;
+}
+function finish() {
+  if (state.active) {
+    const seedCost = Object.values(state.seeds).reduce((a, s) => a + s.n * s.each, 0);
+    state.history.unshift({ when: "Nov 3, 07:50", time: "10m 12s", xp: Math.round(state.xp), picked: state.picked,
+      value: state.value, seeds: seedCost, compost: state.compost, payments: 0 });
+  }
+  Object.assign(state, { done: new Set(), active: false, picked: 0, value: 0, seeds: {}, compost: 0, xp: 0, last: "" });
+}
 
-// ---------- events ----------
 document.querySelector(".tabs").addEventListener("click", e => {
   const t = e.target.dataset.tab; if (!t) return;
   document.querySelectorAll(".tabs button").forEach(b => b.setAttribute("aria-selected", b.dataset.tab === t));
   document.querySelectorAll(".tab").forEach(d => d.classList.toggle("on", d.id === "tab-" + t));
 });
 document.body.addEventListener("change", e => {
-  const t = e.target;
-  if (t.dataset.patch) { PATCHES.find(p => p.id === t.dataset.patch).herb = t.value; render(); }
-  else if (t.dataset.step) { const [id, k] = t.dataset.step.split(":"); const p = PATCHES.find(x => x.id === id);
-    if (t.checked) doStep(p, k); else delete state.steps[t.dataset.step]; render(); }
-  else if (t.dataset.toggle) { PATCHES.find(p => p.id === t.dataset.toggle).off = !t.checked; render(); }
-  else if (t.id === "onTheWay") { state.onTheWay = t.checked; render(); }
-  else if (t.id === "notifyBox") { state.notify = t.checked; }
-  else if (t.id === "compost") { state.compost = t.value; render(); }
-  else if (t.id === "herbRunsPerDay") { state.runsPerDay = +t.value; render(); }
-});
-document.getElementById("history").addEventListener("click", e => {
-  if (e.target.dataset.del !== undefined) { state.history.splice(+e.target.dataset.del, 1); render(); }
-});
-document.getElementById("clearHist").addEventListener("click", () => { state.history = []; render(); });
-document.getElementById("newRun").addEventListener("click", () => { finish(); state.active = true; render(); });
-document.getElementById("finishRun").addEventListener("click", () => { finish(); render(); });
-function finish() {
-  if (state.active && (state.picked || state.costs)) {
-    const d = new Date();
-    state.history.unshift({ when: d.toLocaleString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false }),
-      profit: state.value - state.costs, xp: state.xp, herbs: state.picked });
-  }
-  // Planted patches start growing.
-  for (const p of PATCHES) if (isDone(p, "plant")) { state.status[p.id] = "growing"; state.left[p.id] = 80; }
-  state.steps = {}; state.active = false; state.picked = state.value = state.costs = state.xp = 0; state.lastTicked = null;
-}
-document.getElementById("demoTick").addEventListener("click", () => {
-  for (const p of dueNow()) for (const [k] of stepsFor(p)) if (!isDone(p, k)) { doStep(p, k); render(); return; }
-  document.getElementById("demoNote").textContent = "Every due patch is done. Press Finish run to save it to the history.";
-});
-document.getElementById("demoTime").addEventListener("click", () => {
-  for (const p of PATCHES) if (state.status[p.id] === "growing") {
-    state.left[p.id] = Math.max(0, state.left[p.id] - 20);
-    if (state.left[p.id] === 0) state.status[p.id] = "ready";
-  }
-  if (state.notify && enabled().every(p => state.status[p.id] !== "growing"))
-    document.getElementById("demoNote").textContent = "RuneLite notification: \"Your herb patches are grown.\"";
+  const k = e.target.dataset.step; if (!k) return;
+  if (e.target.checked) doStep(k); else state.done.delete(k);
   render();
 });
-document.getElementById("demoDisease").addEventListener("click", () => { state.status.falador = "diseased"; state.left.falador = 0; render(); });
-document.getElementById("demoSecateurs").addEventListener("click", () => { state.secateurs = !state.secateurs; render(); });
-
+document.body.addEventListener("click", e => {
+  const del = e.target.dataset.del;
+  if (del === undefined) return;
+  const list = (state.bug ? [BAD] : []).concat(state.history);
+  const item = list[+del];
+  if (item === BAD) state.bug = false; else state.history.splice(state.history.indexOf(item), 1);
+  document.getElementById("demoBug").setAttribute("aria-pressed", state.bug);
+  render();
+});
+document.getElementById("demoStep").addEventListener("click", () => {
+  const next = allKeys().find(k => !state.done.has(k));
+  if (next) doStep(next); else document.getElementById("note").textContent = "Everything due is done. Press Finish run to save it.";
+  render();
+});
+document.getElementById("ironBox").addEventListener("change", e => { state.iron = e.target.checked; render(); });
+document.getElementById("demoFinish").addEventListener("click", () => { finish(); render(); });
+document.getElementById("finishRun").addEventListener("click", () => { finish(); render(); });
+document.getElementById("newRun").addEventListener("click", () => { finish(); state.active = true; render(); });
+document.getElementById("demoBug").addEventListener("click", e => {
+  state.bug = !state.bug;
+  e.target.setAttribute("aria-pressed", state.bug);
+  document.getElementById("note").textContent = state.bug
+    ? "Before the fix: one entry from all your XP counted as picks, worth 274M. After the fix it can't happen, and entries like it are removed automatically."
+    : "After the fix: the bad entry is gone and lifetime profit is just your real runs.";
+  render();
+});
 render();
 </script>
 </body>

@@ -25,10 +25,12 @@ public final class HerbSettings
 	/** 0, 0.05, 0.10 or 0.15 at Catherby from the Kandarin diary. */
 	public final double kandarinBonus;
 	public final boolean kourendHard;
+	/** False for ironman accounts that don't buy seeds: seeds then cost nothing in profit. */
+	public final boolean countSeeds;
 
 	public HerbSettings(Map<HerbLocation, HerbType> herbs, Set<HerbLocation> enabled, Set<HerbLocation> allotments,
 		AllotmentType allotmentCrop, boolean payForAllotments, Compost compost, int farmingLevel, double itemBonus,
-		double kandarinBonus, boolean kourendHard)
+		double kandarinBonus, boolean kourendHard, boolean countSeeds)
 	{
 		this.herbs = Collections.unmodifiableMap(new EnumMap<>(herbs.isEmpty() ? new EnumMap<>(HerbLocation.class) : herbs));
 		this.enabled = Collections.unmodifiableSet(enabled.isEmpty() ? EnumSet.noneOf(HerbLocation.class) : EnumSet.copyOf(enabled));
@@ -40,6 +42,7 @@ public final class HerbSettings
 		this.itemBonus = itemBonus;
 		this.kandarinBonus = kandarinBonus;
 		this.kourendHard = kourendHard;
+		this.countSeeds = countSeeds;
 	}
 
 	public HerbType herbAt(HerbLocation location)

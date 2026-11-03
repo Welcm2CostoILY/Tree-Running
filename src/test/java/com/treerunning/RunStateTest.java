@@ -25,4 +25,18 @@ public class RunStateTest
 		again.fillDefaults();
 		assertEquals(2, again.runs.size());
 	}
+
+	@Test
+	public void impossibleRunsFromTheLoginBugAreRemoved()
+	{
+		String bad = "{\"herbRuns\":[{\"endedAt\":1,\"xp\":5300000,\"picked\":173770,\"value\":274000000,\"profitTracked\":true},"
+			+ "{\"endedAt\":2,\"xp\":6000,\"picked\":63,\"value\":500000,\"profitTracked\":true}],"
+			+ "\"runs\":[{\"endedAt\":3,\"xp\":5400000,\"patches\":3},{\"endedAt\":4,\"xp\":182000,\"patches\":19}]}";
+		RunState state = new Gson().fromJson(bad, RunState.class);
+		state.fillDefaults();
+		assertEquals(1, state.herbRuns.size());
+		assertEquals(63, state.herbRuns.get(0).picked);
+		assertEquals(1, state.runs.size());
+		assertEquals(182000, state.runs.get(0).xp);
+	}
 }

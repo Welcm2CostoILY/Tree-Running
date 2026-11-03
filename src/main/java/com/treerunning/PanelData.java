@@ -91,6 +91,11 @@ final class PanelData
 	int herbPicked;
 	long herbValue;
 	long herbCost;
+	long herbSeedCost;
+	long herbCompostCost;
+	/** Seeds planted this herb run: name → count. */
+	Map<String, Integer> herbSeeds = Collections.emptyMap();
+	boolean countSeeds = true;
 	int herbXp;
 	List<RunRecord> herbRuns = Collections.emptyList();
 	String herbLastMatch;
@@ -184,7 +189,7 @@ final class PanelData
 		int n = 0;
 		for (HerbTask t : herbTasks)
 		{
-			if (t.isDue() && herbDone.contains(t.stepKey(HerbTask.PLANT)))
+			if (t.isDue() && t.isDone(herbDone, HerbTask.PLANT))
 			{
 				n++;
 			}

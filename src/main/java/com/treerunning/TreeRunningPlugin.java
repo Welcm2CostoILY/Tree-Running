@@ -127,6 +127,10 @@ public class TreeRunningPlugin extends Plugin
 	private static final int COMPOST_MATCH_TICKS = 10;
 	/** Patch changes this soon after arriving are the area's varbits catching up. */
 	private static final int ARRIVAL_SETTLE_TICKS = 2;
+	/** More Farming XP than any one action gives (a redwood check-health is about 22,500). */
+	private static final int MAX_ACTION_XP = 40_000;
+	/** No single XP drop picks more herbs than this. */
+	private static final int MAX_PICKS_PER_DROP = 3;
 
 	/** Herb travel notes are saved beside the tree-stop ones, under this prefix. */
 	private static final String HERB_TRAVEL_PREFIX = "HERB_";
@@ -310,7 +314,8 @@ public class TreeRunningPlugin extends Plugin
 		clientThread.invokeLater(() ->
 		{
 			loadState();
-			lastXp = client.getGameState() == GameState.LOGGED_IN ? client.getSkillExperience(Skill.FARMING) : -1;
+			int xp = client.getGameState() == GameState.LOGGED_IN ? client.getSkillExperience(Skill.FARMING) : 0;
+			lastXp = xp > 0 ? xp : -1;
 			refresh();
 		});
 	}
@@ -392,9 +397,13 @@ public class TreeRunningPlugin extends Plugin
 			lastValue.clear();
 			arrivedAt.clear();
 		}
+		if (event.getGameState() == GameState.LOGIN_SCREEN || event.getGameState() == GameState.HOPPING)
+		{
+			// Your XP isn't known again until the first stat update after logging in.
+			lastXp = -1;
+		}
 		if (event.getGameState() == GameState.LOGGED_IN)
 		{
-			lastXp = client.getSkillExperience(Skill.FARMING);
 			refresh();
 		}
 	}
@@ -448,7 +457,19 @@ public class TreeRunningPlugin extends Plugin
 		}
 
 		int xp = event.getXp();
-		if (lastXp >= 0 && xp > lastXp)
+		if (lastXp <= 0 || xp - lastXp > MAX_ACTION_XP)
+		{
+			// The first update after logging in (or a jump no farming action gives) sets the
+			// baseline; it's never one action.
+			if (lastXp > 0 && xp > lastXp)
+			{
+				debug.log(client.getTickCount(), "Ignored a Farming XP jump of " + (xp - lastXp));
+			}
+			lastXp = xp;
+			refresh();
+			return;
+		}
+		if (xp > lastXp)
 		{
 			int tick = client.getTickCount();
 			int delta = xp - lastXp;
@@ -893,7 +914,7 @@ public class TreeRunningPlugin extends Plugin
 			state.herbDone.add(HerbTask.stepKey(key, HerbTask.HARVEST));
 			state.herbDone.add(HerbTask.stepKey(key, HerbTask.CLEAR));
 			state.herbDone.add(HerbTask.stepKey(key, HerbTask.CURE));
-			state.herbCost += plantCost(patch, after.getCrop());
+			addSeedsPlanted(patch, after.getCrop());
 			state.herbXp += delta;
 			state.herbLastTickAt = System.currentTimeMillis();
 			herbLastMatch = "Planted " + after.getCrop() + " at " + patch.name();
@@ -966,7 +987,7 @@ public class TreeRunningPlugin extends Plugin
 				continue;
 			}
 			double n = delta / each;
-			if (Math.abs(n - Math.round(n)) < 0.15 && Math.round(n) >= 1)
+			if (Math.abs(n - Math.round(n)) < 0.15 && Math.round(n) >= 1 && Math.round(n) <= MAX_PICKS_PER_DROP)
 			{
 				startHerbRunIfNeeded();
 				countPicks(patch, r.getCrop(), delta);
@@ -981,6 +1002,11 @@ public class TreeRunningPlugin extends Plugin
 	{
 		double each = harvestXp(patch, crop);
 		int n = each > 0 ? (int) Math.max(1, Math.round(delta / each)) : 1;
+		if (n > MAX_PICKS_PER_DROP)
+		{
+			debug.log(client.getTickCount(), "  ignored " + delta + " XP: too much for picks at " + patch.name());
+			return;
+		}
 		int itemId = produceId(patch, crop);
 		state.herbPicked += n;
 		state.herbValue += (long) n * (itemId > 0 ? price(itemId) : 0);
@@ -1011,15 +1037,41 @@ public class TreeRunningPlugin extends Plugin
 		return a == null ? -1 : a.getProduceId();
 	}
 
-	private long plantCost(TrackedPatch patch, String crop)
+	/** Records the seeds a planting used, and their cost unless seed costs are off (ironman). */
+	private void addSeedsPlanted(TrackedPatch patch, String crop)
 	{
+		int seedId;
+		int count;
+		String name;
 		if (patch.type == TrackedPatch.Type.HERB)
 		{
 			HerbType h = HerbType.byCropName(crop);
-			return h == null ? 0 : price(h.getSeedId());
+			if (h == null)
+			{
+				return;
+			}
+			seedId = h.getSeedId();
+			count = 1;
+			name = h.getDisplayName();
 		}
-		AllotmentType a = AllotmentType.byCropName(crop);
-		return a == null ? 0 : (long) AllotmentType.SEEDS_PER_PATCH * price(a.getSeedId());
+		else
+		{
+			AllotmentType a = AllotmentType.byCropName(crop);
+			if (a == null)
+			{
+				return;
+			}
+			seedId = a.getSeedId();
+			count = AllotmentType.SEEDS_PER_PATCH;
+			name = a.getDisplayName();
+		}
+		state.herbSeeds.merge(name, count, Integer::sum);
+		if (!config.ironmanSeeds())
+		{
+			long cost = (long) count * price(seedId);
+			state.herbSeedCost += cost;
+			state.herbCost += cost;
+		}
 	}
 
 	/** "You treat the herb patch with ultracompost." */
@@ -1052,7 +1104,9 @@ public class TreeRunningPlugin extends Plugin
 		Compost compost = config.compost();
 		if (compost.getItemId() > 0)
 		{
-			state.herbCost += Math.round(price(compost.getItemId()) * compost.getBucketsPerUse());
+			long cost = Math.round(price(compost.getItemId()) * compost.getBucketsPerUse());
+			state.herbCompostCost += cost;
+			state.herbCost += cost;
 		}
 		state.herbLastTickAt = System.currentTimeMillis();
 		herbLastMatch = "Composted " + TrackedPatch.BY_KEY.get(key).name();
@@ -1247,7 +1301,7 @@ public class TreeRunningPlugin extends Plugin
 					SeenPatch seen = state.seen.get(key);
 					boolean replanted = seen == null || seen.seenAt < state.startedAt
 						|| seen.condition == PatchCondition.GROWING;
-					if (replanted)
+					if (replanted && !config.ironmanSeeds())
 					{
 						cost += price(crop.getSeed().getId());
 					}
@@ -1305,6 +1359,9 @@ public class TreeRunningPlugin extends Plugin
 		state.herbPicked = 0;
 		state.herbValue = 0;
 		state.herbCost = 0;
+		state.herbSeedCost = 0;
+		state.herbCompostCost = 0;
+		state.herbSeeds.clear();
 		state.herbXp = 0;
 		state.paid.removeIf(k -> TrackedPatch.BY_KEY.containsKey(k) && TrackedPatch.BY_KEY.get(k).type == TrackedPatch.Type.ALLOTMENT);
 	}
@@ -1329,6 +1386,8 @@ public class TreeRunningPlugin extends Plugin
 			r.startedAt = state.herbStartedAt;
 			r.value = state.herbValue;
 			r.cost = state.herbCost;
+			r.seedCost = state.herbSeedCost;
+			r.compostCost = state.herbCompostCost;
 			r.picked = state.herbPicked;
 			r.profitTracked = true;
 			state.herbRuns.add(r);
@@ -1456,7 +1515,7 @@ public class TreeRunningPlugin extends Plugin
 		}
 		for (HerbTask task : herbTasks)
 		{
-			if (!task.isDue() || herbDone.contains(task.stepKey(HerbTask.PLANT)))
+			if (!task.isDue() || task.isDone(herbDone, HerbTask.PLANT))
 			{
 				continue;
 			}
@@ -1604,15 +1663,22 @@ public class TreeRunningPlugin extends Plugin
 		});
 	}
 
-	/** Ticks or unticks one herb-run step by hand. */
-	void toggleHerbStep(String stepKey)
+	/**
+	 * Ticks or unticks a herb-run step by hand. For allotments it's the step on every
+	 * allotment at the location: unticks them all if all are done, otherwise ticks them all.
+	 */
+	void toggleHerbStep(List<String> stepKeys)
 	{
 		clientThread.invokeLater(() ->
 		{
-			if (!state.herbDone.remove(stepKey))
+			if (state.herbDone.containsAll(stepKeys))
+			{
+				state.herbDone.removeAll(stepKeys);
+			}
+			else
 			{
 				startHerbRunIfNeeded();
-				state.herbDone.add(stepKey);
+				state.herbDone.addAll(stepKeys);
 				state.herbLastTickAt = System.currentTimeMillis();
 			}
 			saveState();
@@ -1912,7 +1978,7 @@ public class TreeRunningPlugin extends Plugin
 		}
 		double items = (config.magicSecateurs() ? 0.10 : 0) + (config.farmingCape() ? 0.05 : 0);
 		return new HerbSettings(herbs, enabled, allotments, config.allotmentCrop(), config.payForAllotments(), config.compost(),
-			level, items, config.kandarinDiary().bonus(), config.kourendHard());
+			level, items, config.kandarinDiary().bonus(), config.kourendHard(), !config.ironmanSeeds());
 	}
 
 	private int goalXp()
@@ -2057,10 +2123,16 @@ public class TreeRunningPlugin extends Plugin
 			Set<String> unpaidAllotments = new HashSet<>();
 			for (HerbTask task : herbTasks)
 			{
-				if (task.isAllotment() && task.getLocation().getAllotmentGardener() >= 0
-					&& herbDone.contains(task.stepKey(HerbTask.PLANT)) && !state.paid.contains(task.getKey()))
+				if (!task.isAllotment() || task.getLocation().getAllotmentGardener() < 0)
 				{
-					unpaidAllotments.add(task.getKey());
+					continue;
+				}
+				for (String patch : task.getPatchKeys())
+				{
+					if (herbDone.contains(HerbTask.stepKey(patch, HerbTask.PLANT)) && !state.paid.contains(patch))
+					{
+						unpaidAllotments.add(patch);
+					}
 				}
 			}
 			d.unpaidAllotments = unpaidAllotments;
@@ -2077,6 +2149,10 @@ public class TreeRunningPlugin extends Plugin
 		d.herbPicked = state.herbPicked;
 		d.herbValue = state.herbValue;
 		d.herbCost = state.herbCost;
+		d.herbSeedCost = state.herbSeedCost;
+		d.herbCompostCost = state.herbCompostCost;
+		d.herbSeeds = new java.util.LinkedHashMap<>(state.herbSeeds);
+		d.countSeeds = !config.ironmanSeeds();
 		d.herbXp = state.herbXp;
 		d.herbRuns = new ArrayList<>(state.herbRuns);
 		d.herbLastMatch = herbLastMatch;

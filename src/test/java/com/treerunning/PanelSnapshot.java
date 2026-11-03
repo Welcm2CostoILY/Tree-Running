@@ -136,7 +136,7 @@ public class PanelSnapshot
 		Set<HerbLocation> on = EnumSet.allOf(HerbLocation.class);
 		on.remove(HerbLocation.HARMONY_ISLAND);
 		HerbSettings herbSettings = new HerbSettings(herbs, on, EnumSet.of(HerbLocation.CATHERBY), AllotmentType.SNAPE_GRASS,
-			false, Compost.BOTTOMLESS, 90, 0.10, 0.05, false);
+			false, Compost.BOTTOMLESS, 90, 0.10, 0.05, false, true);
 		Map<String, SeenPatch> seen = new HashMap<>(seenTrees);
 		seen.put(HerbTask.keyFor(HerbLocation.FARMING_GUILD, -1), new SeenPatch(PatchCondition.GROWN, 0, 1, 20, "Snapdragon", now - 900_000L));
 		seen.put(HerbTask.keyFor(HerbLocation.FALADOR, -1), new SeenPatch(PatchCondition.DISEASED, 2, 5, 20, "Ranarr", now - 900_000L));
@@ -168,6 +168,11 @@ public class PanelSnapshot
 		data.herbPicked = 9;
 		data.herbValue = 88_200;
 		data.herbCost = 60_300;
+		data.herbSeedCost = 60_000;
+		data.herbCompostCost = 300;
+		Map<String, Integer> seedsPlanted = new java.util.LinkedHashMap<>();
+		seedsPlanted.put("Snapdragon", 1);
+		data.herbSeeds = seedsPlanted;
 		data.herbXp = 973;
 		data.herbLastMatch = "Picked 9 Snapdragon at Farming Guild herb patch";
 		data.picker = HerbPlanner.picker(herbSettings, id -> herbPrice.getOrDefault(id, 0L));
@@ -188,6 +193,7 @@ public class PanelSnapshot
 		h1.value = 512_000;
 		h1.cost = 361_000;
 		h1.picked = 64;
+		h1.seedCost = 356_000;
 		h1.profitTracked = true;
 		herbRuns.add(h1);
 		data.herbRuns = herbRuns;

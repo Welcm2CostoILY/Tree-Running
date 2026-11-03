@@ -382,6 +382,12 @@ public interface TreeRunningConfig extends Config
 		return Compost.BOTTOMLESS;
 	}
 
+	@ConfigItem(keyName = "ironmanSeeds", name = "Don't count seed costs (ironman)", description = "For accounts that can't buy seeds: profit counts the harvest only, minus compost and payments. Applies to herb, allotment and tree runs", section = herbSection, position = 45)
+	default boolean ironmanSeeds()
+	{
+		return false;
+	}
+
 	@ConfigItem(keyName = "magicSecateurs", name = "Magic secateurs", description = "Count +10% herbs in estimates. The run warns you if they aren't with you", section = herbSection, position = 37)
 	default boolean magicSecateurs()
 	{

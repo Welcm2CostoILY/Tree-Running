@@ -50,6 +50,8 @@ A RuneLite plugin for daily OSRS Farming tree runs toward a goal, such as 99 Far
 - Settings saved as JSON strings in hidden config keys: `bankStops`, `stopOrder`, `patchOrder`, `travelText` (tree stops by `RouteStep` name, herb patches as `HERB_<HerbLocation>`); `bankFilter` is a hidden enum.
 - A grown herb or allotment patch steps through three states as it's picked, so a GROWN → GROWN change with XP is a pick. Changes in the first 2 ticks after arriving in an area are the area's varbits catching up, not actions.
 - Our own `state` saves fire ConfigChanged; `onConfigChanged` ignores that key.
+- Farming XP: the first StatChanged after login only sets the baseline (`lastXp` is -1 until then), and jumps over `MAX_ACTION_XP` are ignored; one XP drop never counts more than `MAX_PICKS_PER_DROP` herbs. `RunState.fillDefaults` drops history entries beyond what any real run reaches (from the old login bug).
+- A location's allotments are one `HerbTask` (key `allot:LOC`) covering per-patch keys `allot:LOC:i`; its steps are done when every patch has done them.
 - A tree tick needs a real check-health (CHECK_HEALTH → anything else) or a planting (GROWING stage 0); raking (weeds) never ticks.
 - Prices come from `itemManager.getItemPriceWithSource(id, true)`, the Wiki live price.
 - Owner preference: for UI changes, show a clickable preview (update `preview/`) before changing the plugin.

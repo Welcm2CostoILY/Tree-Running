@@ -32,7 +32,7 @@ public class HerbPlannerTest
 		Map<HerbLocation, HerbType> herbs = new EnumMap<>(HerbLocation.class);
 		herbs.put(HerbLocation.TROLL_STRONGHOLD, HerbType.SNAPDRAGON);
 		return new HerbSettings(herbs, EnumSet.of(HerbLocation.FALADOR, HerbLocation.CATHERBY, HerbLocation.TROLL_STRONGHOLD),
-			allotments, AllotmentType.SNAPE_GRASS, pay, Compost.ULTRACOMPOST, 90, 0.10, 0.10, false);
+			allotments, AllotmentType.SNAPE_GRASS, pay, Compost.ULTRACOMPOST, 90, 0.10, 0.10, false, true);
 	}
 
 	@Test
@@ -54,7 +54,8 @@ public class HerbPlannerTest
 	public void allotmentsAreAddedWhereTurnedOn()
 	{
 		List<HerbTask> tasks = HerbPlanner.buildTasks(settings(EnumSet.of(HerbLocation.CATHERBY), true), new HashMap<>(), NOW);
-		assertEquals(5, tasks.size());
+		// Catherby's two allotments are one entry.
+		assertEquals(4, tasks.size());
 		HerbTask allot = null;
 		for (HerbTask t : tasks)
 		{
@@ -65,6 +66,15 @@ public class HerbPlannerTest
 			}
 		}
 		assertEquals(AllotmentType.SNAPE_GRASS, allot.getAllotmentCrop());
+		assertEquals(2, allot.getPatchCount());
+		assertEquals("Plant 6 Snape grass seeds", allot.getSteps().get(allot.getSteps().size() - 2).getLabel());
+		// Planting one allotment isn't the step done; both are.
+		Set<String> one = new HashSet<>();
+		one.add(HerbTask.stepKey(HerbTask.keyFor(HerbLocation.CATHERBY, 0), HerbTask.PLANT));
+		assertFalse(allot.isDone(one, HerbTask.PLANT));
+		assertEquals(1, allot.doneCount(one, HerbTask.PLANT));
+		one.add(HerbTask.stepKey(HerbTask.keyFor(HerbLocation.CATHERBY, 1), HerbTask.PLANT));
+		assertTrue(allot.isDone(one, HerbTask.PLANT));
 		assertEquals(HerbTask.PAY, allot.getSteps().get(allot.getSteps().size() - 1).getId());
 
 		List<HerbPlanner.Need> needs = HerbPlanner.needs(tasks, new HashSet<>(), settings(EnumSet.of(HerbLocation.CATHERBY), true), id -> 0);
@@ -104,8 +114,7 @@ public class HerbPlannerTest
 		assertEquals(PatchCondition.GROWN, troll.getCondition());
 
 		// Catherby is still growing, so its seed isn't needed.
-		Set<String> done = new HashSet<>();
-		done.add(falador.stepKey(HerbTask.PLANT));
+		Set<String> done = new HashSet<>(falador.stepKeys(HerbTask.PLANT));
 		List<HerbPlanner.Need> needs = HerbPlanner.needs(tasks, done, settings(EnumSet.noneOf(HerbLocation.class), false), id -> 0);
 		assertEquals(2, needs.size());
 		assertEquals(HerbType.SNAPDRAGON.getSeedId(), needs.get(0).getItemId());
@@ -139,6 +148,15 @@ public class HerbPlannerTest
 		HerbPlanner.Estimate e = HerbPlanner.estimate(HerbType.RANARR, HerbLocation.TROLL_STRONGHOLD, s, id -> prices.getOrDefault(id, 0L));
 		double herbs = HerbPlanner.expectedYield(HerbType.RANARR, HerbLocation.TROLL_STRONGHOLD, s);
 		assertEquals(Math.round(herbs * 7000 - 40000 - 1000), e.getProfit());
+		assertEquals(40000, e.getSeedCost());
+
+		// Ironman: seeds cost nothing.
+		Map<HerbLocation, HerbType> herbs2 = new EnumMap<>(HerbLocation.class);
+		HerbSettings iron = new HerbSettings(herbs2, EnumSet.of(HerbLocation.TROLL_STRONGHOLD), EnumSet.noneOf(HerbLocation.class),
+			AllotmentType.SNAPE_GRASS, false, Compost.ULTRACOMPOST, 90, 0.10, 0.10, false, false);
+		HerbPlanner.Estimate i = HerbPlanner.estimate(HerbType.RANARR, HerbLocation.TROLL_STRONGHOLD, iron, id -> prices.getOrDefault(id, 0L));
+		assertEquals(0, i.getSeedCost());
+		assertEquals(Math.round(herbs * 7000 - 1000), i.getProfit());
 	}
 
 	// ---------------------------------------------------------------- tree helpers

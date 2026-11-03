@@ -23,6 +23,10 @@ public final class RunRecord
 	public boolean profitTracked;
 	/** Herbs or crops picked (herb runs). */
 	public int picked;
+	/** The part of cost that was seeds (0 when seed costs are off, for ironman accounts). */
+	public long seedCost;
+	/** The part of cost that was compost. */
+	public long compostCost;
 
 	public RunRecord()
 	{

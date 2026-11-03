@@ -93,7 +93,7 @@ class TreeRunningOverlay extends OverlayPanel
 
 		for (HerbTask herb : d.onTheWay.getOrDefault(step, java.util.Collections.emptyList()))
 		{
-			boolean planted = d.herbDone.contains(herb.stepKey(HerbTask.PLANT));
+			boolean planted = herb.isDone(d.herbDone, HerbTask.PLANT);
 			panelComponent.getChildren().add(LineComponent.builder()
 				.left((planted ? "[x] " : "[ ] ") + "Herb: " + herb.getPlantName())
 				.leftColor(planted ? DONE : HERB)
@@ -135,7 +135,7 @@ class TreeRunningOverlay extends OverlayPanel
 		HerbTask next = null;
 		for (HerbTask task : d.herbTasks)
 		{
-			if (task.isDue() && !d.herbDone.contains(task.stepKey(HerbTask.PLANT)))
+			if (task.isDue() && !task.isDone(d.herbDone, HerbTask.PLANT))
 			{
 				next = task;
 				break;
@@ -160,7 +160,7 @@ class TreeRunningOverlay extends OverlayPanel
 			}
 			for (HerbTask.Step step : task.getSteps())
 			{
-				boolean done = d.herbDone.contains(task.stepKey(step.getId()));
+				boolean done = task.isDone(d.herbDone, step.getId());
 				panelComponent.getChildren().add(LineComponent.builder()
 					.left((done ? "[x] " : "[ ] ") + (task.isAllotment() ? task.getLabel() + ": " : "") + step.getLabel())
 					.leftColor(done ? DONE : TODO)

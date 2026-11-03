@@ -36,60 +36,125 @@ public final class HerbPlanner
 			{
 				continue;
 			}
-			tasks.add(task(location, -1, settings.herbAt(location), null, settings, seen.get(HerbTask.keyFor(location, -1)), now));
-			if (settings.allotments.contains(location))
+			tasks.add(task(location, java.util.Collections.singletonList(HerbTask.keyFor(location, -1)),
+				settings.herbAt(location), null, settings, seen, now));
+			if (settings.allotments.contains(location) && location.getAllotmentCount() > 0)
 			{
+				List<String> keys = new ArrayList<>();
 				for (int i = 0; i < location.getAllotmentCount(); i++)
 				{
-					tasks.add(task(location, i, null, settings.allotmentCrop, settings, seen.get(HerbTask.keyFor(location, i)), now));
+					keys.add(HerbTask.keyFor(location, i));
 				}
+				tasks.add(task(location, keys, null, settings.allotmentCrop, settings, seen, now));
 			}
 		}
 		return tasks;
 	}
 
-	private static HerbTask task(HerbLocation location, int allotment, HerbType herb, AllotmentType crop, HerbSettings settings,
-		SeenPatch seen, long now)
+	/** What a patch most likely looks like now; weeds on an empty patch still count as empty. */
+	private static PatchCondition predict(SeenPatch s, long now)
 	{
-		PatchCondition condition = seen == null ? PatchCondition.UNKNOWN : seen.predict(now);
-		if (condition == PatchCondition.GROWING || condition == PatchCondition.GROWN)
+		if (s == null)
 		{
-			if (seen != null && seen.isWeeds())
-			{
-				// Weeds grow back on an empty patch; it's still empty for planting.
-				condition = PatchCondition.EMPTY;
-			}
+			return PatchCondition.UNKNOWN;
 		}
-		String plant = herb != null ? herb.getDisplayName() : crop.getDisplayName();
-		List<HerbTask.Step> steps = new ArrayList<>();
-		switch (condition)
+		PatchCondition c = s.predict(now);
+		if ((c == PatchCondition.GROWING || c == PatchCondition.GROWN) && s.isWeeds())
+		{
+			return PatchCondition.EMPTY;
+		}
+		return c;
+	}
+
+	/** The one condition shown for several patches together: the most urgent one. */
+	private static int urgency(PatchCondition c)
+	{
+		switch (c)
 		{
 			case DISEASED:
-				steps.add(new HerbTask.Step(HerbTask.CURE, "Cure it (plant cure) or clear it"));
-				break;
+				return 6;
 			case DEAD:
-				steps.add(new HerbTask.Step(HerbTask.CLEAR, "Clear the dead patch"));
-				break;
+				return 5;
+			case GROWN:
+			case CHECK_HEALTH:
+				return 4;
 			case EMPTY:
-				break;
+			case STUMP:
+				return 3;
+			case UNKNOWN:
+				return 2;
 			default:
-				steps.add(new HerbTask.Step(HerbTask.HARVEST,
-					"Harvest" + (seen != null && !seen.isWeeds() && seen.crop != null ? " " + seen.crop : "")));
-				break;
+				return 1;
+		}
+	}
+
+	private static HerbTask task(HerbLocation location, List<String> keys, HerbType herb, AllotmentType crop, HerbSettings settings,
+		Map<String, SeenPatch> seenMap, long now)
+	{
+		boolean allotments = crop != null;
+		int n = keys.size();
+		PatchCondition condition = PatchCondition.GROWING;
+		boolean anyGrown = false;
+		boolean anyDiseased = false;
+		boolean anyDead = false;
+		boolean anySeen = false;
+		String growing = null;
+		long readyAt = 0;
+		for (String key : keys)
+		{
+			SeenPatch s = seenMap.get(key);
+			PatchCondition c = predict(s, now);
+			anySeen |= s != null;
+			if (urgency(c) > urgency(condition))
+			{
+				condition = c;
+			}
+			anyGrown |= c == PatchCondition.GROWN || c == PatchCondition.UNKNOWN;
+			anyDiseased |= c == PatchCondition.DISEASED;
+			anyDead |= c == PatchCondition.DEAD;
+			if (s != null && !s.isWeeds() && s.crop != null && growing == null)
+			{
+				growing = s.crop;
+			}
+			if (c == PatchCondition.GROWING && s != null)
+			{
+				readyAt = readyAt == 0 ? s.readyBy() : Math.min(readyAt, s.readyBy());
+			}
+		}
+		if (condition != PatchCondition.GROWING)
+		{
+			readyAt = 0;
+		}
+
+		String both = n > 1 ? (n == 2 ? " both allotments" : " the allotments") : allotments ? " the allotment" : "";
+		String plant = herb != null ? herb.getDisplayName() : crop.getDisplayName();
+		List<HerbTask.Step> steps = new ArrayList<>();
+		if (anyDiseased)
+		{
+			steps.add(new HerbTask.Step(HerbTask.CURE, allotments ? "Cure or clear" + both.replace(" both", " the diseased") : "Cure it (plant cure) or clear it"));
+		}
+		if (anyDead)
+		{
+			steps.add(new HerbTask.Step(HerbTask.CLEAR, allotments ? "Clear the dead allotment" : "Clear the dead patch"));
+		}
+		if (anyGrown)
+		{
+			steps.add(new HerbTask.Step(HerbTask.HARVEST, allotments ? "Harvest" + both
+				: "Harvest" + (growing != null ? " " + growing : "")));
 		}
 		if (settings.compost != Compost.NONE)
 		{
-			steps.add(new HerbTask.Step(HerbTask.COMPOST, "Compost"));
+			steps.add(new HerbTask.Step(HerbTask.COMPOST, allotments && n > 1 ? "Compost both" : "Compost"));
 		}
-		steps.add(new HerbTask.Step(HerbTask.PLANT, "Plant " + plant
-			+ (crop != null ? " (" + AllotmentType.SEEDS_PER_PATCH + " seeds)" : "")));
-		if (crop != null && settings.payForAllotments && location.getAllotmentGardener() >= 0)
+		steps.add(new HerbTask.Step(HerbTask.PLANT, allotments
+			? "Plant " + (AllotmentType.SEEDS_PER_PATCH * n) + " " + plant + " seeds"
+			: "Plant " + plant));
+		if (allotments && settings.payForAllotments && location.getAllotmentGardener() >= 0)
 		{
-			steps.add(new HerbTask.Step(HerbTask.PAY, "Pay " + crop.getPaymentQuantity() + " " + crop.getPaymentName()));
+			steps.add(new HerbTask.Step(HerbTask.PAY, "Pay " + crop.getPaymentQuantity() * n + " " + crop.getPaymentName()
+				+ (n > 1 ? " (" + crop.getPaymentQuantity() + " each)" : "")));
 		}
-		long readyAt = seen != null && condition == PatchCondition.GROWING ? seen.readyBy() : 0;
-		String growing = seen != null && !seen.isWeeds() ? seen.crop : null;
-		return new HerbTask(location, allotment, herb, crop, condition, growing, readyAt, seen != null, steps);
+		return new HerbTask(location, allotments, herb, crop, condition, readyAt, anySeen, keys, steps);
 	}
 
 	// ------------------------------------------------------------------ what to bring
@@ -150,7 +215,12 @@ public final class HerbPlanner
 		int compost = 0;
 		for (HerbTask task : tasks)
 		{
-			if (!task.isDue() || done.contains(task.stepKey(HerbTask.PLANT)))
+			if (!task.isDue())
+			{
+				continue;
+			}
+			int toPlant = task.getPatchCount() - task.doneCount(done, HerbTask.PLANT);
+			if (toPlant <= 0)
 			{
 				continue;
 			}
@@ -162,18 +232,18 @@ public final class HerbPlanner
 			else
 			{
 				AllotmentType crop = task.getAllotmentCrop();
-				seeds.merge(crop.getSeedId(), AllotmentType.SEEDS_PER_PATCH, Integer::sum);
+				seeds.merge(crop.getSeedId(), AllotmentType.SEEDS_PER_PATCH * toPlant, Integer::sum);
 				names.put(crop.getSeedId(), crop.getDisplayName() + " seed");
-				if (settings.payForAllotments && task.getLocation().getAllotmentGardener() >= 0
-					&& !done.contains(task.stepKey(HerbTask.PAY)))
+				int toPay = task.getPatchCount() - task.doneCount(done, HerbTask.PAY);
+				if (settings.payForAllotments && task.getLocation().getAllotmentGardener() >= 0 && toPay > 0)
 				{
-					payments.merge(crop.getPaymentId(), crop.getPaymentQuantity(), Integer::sum);
+					payments.merge(crop.getPaymentId(), crop.getPaymentQuantity() * toPay, Integer::sum);
 					names.put(crop.getPaymentId(), crop.getPaymentName());
 				}
 			}
-			if (settings.compost != Compost.NONE && !done.contains(task.stepKey(HerbTask.COMPOST)))
+			if (settings.compost != Compost.NONE)
 			{
-				compost++;
+				compost += task.getPatchCount() - task.doneCount(done, HerbTask.COMPOST);
 			}
 		}
 		List<Need> lines = new ArrayList<>();
@@ -234,14 +304,30 @@ public final class HerbPlanner
 		private final HerbType herb;
 		private final double herbs;
 		private final double xp;
+		private final long value;
+		private final long seedCost;
 		private final long profit;
 
-		Estimate(HerbType herb, double herbs, double xp, long profit)
+		Estimate(HerbType herb, double herbs, double xp, long value, long seedCost, long profit)
 		{
 			this.herb = herb;
 			this.herbs = herbs;
 			this.xp = xp;
+			this.value = value;
+			this.seedCost = seedCost;
 			this.profit = profit;
+		}
+
+		/** The herbs picked on average, at the herb's price. */
+		public long getValue()
+		{
+			return value;
+		}
+
+		/** The seed's price, or 0 when seed costs aren't counted (ironman). */
+		public long getSeedCost()
+		{
+			return seedCost;
 		}
 
 		public HerbType getHerb()
@@ -276,8 +362,10 @@ public final class HerbPlanner
 		double xp = herb.getPlantXp() * alive + herb.getHarvestXp() * herbs;
 		double compostCost = settings.compost.getItemId() > 0
 			? price.applyAsLong(settings.compost.getItemId()) * settings.compost.getBucketsPerUse() : 0;
-		long profit = Math.round(herbs * price.applyAsLong(herb.getHerbId()) - price.applyAsLong(herb.getSeedId()) - compostCost);
-		return new Estimate(herb, herbs, xp, profit);
+		long value = Math.round(herbs * price.applyAsLong(herb.getHerbId()));
+		long seed = settings.countSeeds ? price.applyAsLong(herb.getSeedId()) : 0;
+		long profit = Math.round(value - seed - compostCost);
+		return new Estimate(herb, herbs, xp, value, seed, profit);
 	}
 
 	/** Every herb you can plant, best profit first, for an average (not disease-free) patch. */

@@ -4,10 +4,16 @@ import com.treerunning.data.AllotmentType;
 import com.treerunning.data.HerbLocation;
 import com.treerunning.data.HerbType;
 import com.treerunning.data.PatchCondition;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Set;
 
-/** One herb or allotment patch on a herb run, with the steps to do there. */
+/**
+ * One entry on a herb run: a location's herb patch, or all of its allotments together.
+ * Steps are tracked per patch underneath ("allot:HOSIDIUS:0|plant"), and a step on the
+ * allotment entry counts as done once every allotment there has done it.
+ */
 public final class HerbTask
 {
 	public static final String HARVEST = "harvest";
@@ -41,47 +47,93 @@ public final class HerbTask
 	}
 
 	private final HerbLocation location;
-	private final int allotment;
+	private final boolean allotments;
 	private final HerbType herb;
 	private final AllotmentType allotmentCrop;
 	private final PatchCondition condition;
-	private final String growingCrop;
 	private final long readyAt;
 	private final boolean seen;
+	private final List<String> patchKeys;
 	private final List<Step> steps;
 
-	HerbTask(HerbLocation location, int allotment, HerbType herb, AllotmentType allotmentCrop, PatchCondition condition,
-		String growingCrop, long readyAt, boolean seen, List<Step> steps)
+	HerbTask(HerbLocation location, boolean allotments, HerbType herb, AllotmentType allotmentCrop, PatchCondition condition,
+		long readyAt, boolean seen, List<String> patchKeys, List<Step> steps)
 	{
 		this.location = location;
-		this.allotment = allotment;
+		this.allotments = allotments;
 		this.herb = herb;
 		this.allotmentCrop = allotmentCrop;
 		this.condition = condition;
-		this.growingCrop = growingCrop;
 		this.readyAt = readyAt;
 		this.seen = seen;
+		this.patchKeys = Collections.unmodifiableList(new ArrayList<>(patchKeys));
 		this.steps = Collections.unmodifiableList(steps);
 	}
 
+	/** The key of one patch: "herb:FALADOR", or "allot:FALADOR:0" for an allotment. */
 	public static String keyFor(HerbLocation location, int allotment)
 	{
 		return allotment < 0 ? "herb:" + location.name() : "allot:" + location.name() + ":" + allotment;
 	}
 
-	public static String stepKey(String taskKey, String step)
+	/** The key of a location's allotments together, as one entry. */
+	public static String allotmentsKey(HerbLocation location)
 	{
-		return taskKey + "|" + step;
+		return "allot:" + location.name();
+	}
+
+	public static String stepKey(String patchKey, String step)
+	{
+		return patchKey + "|" + step;
 	}
 
 	public String getKey()
 	{
-		return keyFor(location, allotment);
+		return allotments ? allotmentsKey(location) : keyFor(location, -1);
 	}
 
-	public String stepKey(String step)
+	/** The patches this entry covers: one herb patch, or every allotment at the location. */
+	public List<String> getPatchKeys()
 	{
-		return stepKey(getKey(), step);
+		return patchKeys;
+	}
+
+	/** The per-patch step keys for a step. */
+	public List<String> stepKeys(String step)
+	{
+		List<String> keys = new ArrayList<>(patchKeys.size());
+		for (String k : patchKeys)
+		{
+			keys.add(stepKey(k, step));
+		}
+		return keys;
+	}
+
+	/** Done once every patch here has done it. */
+	public boolean isDone(Set<String> done, String step)
+	{
+		for (String k : patchKeys)
+		{
+			if (!done.contains(stepKey(k, step)))
+			{
+				return false;
+			}
+		}
+		return true;
+	}
+
+	/** How many of the patches here have done it. */
+	public int doneCount(Set<String> done, String step)
+	{
+		int n = 0;
+		for (String k : patchKeys)
+		{
+			if (done.contains(stepKey(k, step)))
+			{
+				n++;
+			}
+		}
+		return n;
 	}
 
 	public HerbLocation getLocation()
@@ -91,16 +143,16 @@ public final class HerbTask
 
 	public boolean isAllotment()
 	{
-		return allotment >= 0;
+		return allotments;
 	}
 
-	/** Which allotment at the location (0 or 1), or -1 for the herb patch. */
-	public int getAllotmentIndex()
+	/** How many patches this entry covers (2 for most allotment pairs). */
+	public int getPatchCount()
 	{
-		return allotment;
+		return patchKeys.size();
 	}
 
-	/** The herb to plant, or null for an allotment. */
+	/** The herb to plant, or null for allotments. */
 	public HerbType getHerb()
 	{
 		return herb;
@@ -119,19 +171,13 @@ public final class HerbTask
 
 	public String getLabel()
 	{
-		return isAllotment() ? location.allotmentName(allotment) : "Herb patch";
+		return allotments ? (patchKeys.size() > 1 ? "Allotments" : "Allotment") : "Herb patch";
 	}
 
-	/** What the patch most likely looks like now. */
+	/** What the patch (or the allotments, taken together) most likely looks like now. */
 	public PatchCondition getCondition()
 	{
 		return condition;
-	}
-
-	/** What's in the patch, from when it was last seen, or null. */
-	public String getGrowingCrop()
-	{
-		return growingCrop;
 	}
 
 	/** When it's grown at the latest, if growing; 0 otherwise. */

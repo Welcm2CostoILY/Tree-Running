@@ -275,6 +275,10 @@ class TreeRunningPanel extends PluginPanel
 				{
 					second.append(" · ").append(run.picked).append(" picked");
 				}
+				if (herbs && run.seedCost > 0)
+				{
+					second.append(" · seeds −").append(compact(run.seedCost));
+				}
 			}
 			panel.add(historyRow(date, value.toString(), second.toString(), () -> delete.accept(index)));
 		}
@@ -761,12 +765,12 @@ class TreeRunningPanel extends PluginPanel
 		}
 		for (HerbTask herb : d.onTheWay.getOrDefault(step, Collections.emptyList()))
 		{
-			String plantKey = herb.stepKey(HerbTask.PLANT);
+			List<String> plantKeys = herb.stepKeys(HerbTask.PLANT);
 			JCheckBox box = checkBox("Herb: " + herb.getPlantName() + " (" + herb.getCondition().getLabel().toLowerCase() + ")",
-				d.herbDone.contains(plantKey));
+				herb.isDone(d.herbDone, HerbTask.PLANT));
 			box.setForeground(HERB);
 			box.setToolTipText("Herbs on the way. Ticks itself when you plant; it's saved with your herb runs.");
-			box.addActionListener(e -> plugin.toggleHerbStep(plantKey));
+			box.addActionListener(e -> plugin.toggleHerbStep(plantKeys));
 			runTab.add(box);
 		}
 	}
@@ -921,15 +925,21 @@ class TreeRunningPanel extends PluginPanel
 					herbTab.add(text(travel, MUTED));
 				}
 			}
-			if (task.isAllotment())
+			if (task.isAllotment() || d.herbTasks.stream().anyMatch(t -> t.isAllotment() && t.getLocation() == task.getLocation() && t.isDue()))
 			{
-				herbTab.add(small(task.getLabel(), ColorScheme.LIGHT_GRAY_COLOR));
+				// Only label the two when a location has both.
+				JLabel sub = small(task.getLabel(), ColorScheme.LIGHT_GRAY_COLOR);
+				sub.setBorder(new EmptyBorder(2, 2, 0, 0));
+				herbTab.add(sub);
 			}
 			for (HerbTask.Step step : task.getSteps())
 			{
-				String stepKey = task.stepKey(step.getId());
-				JCheckBox box = checkBox(step.getLabel(), d.herbDone.contains(stepKey));
-				box.addActionListener(e -> plugin.toggleHerbStep(stepKey));
+				List<String> stepKeys = task.stepKeys(step.getId());
+				int doneHere = task.doneCount(d.herbDone, step.getId());
+				String progress = task.getPatchCount() > 1 && doneHere > 0 && doneHere < task.getPatchCount()
+					? " (" + doneHere + "/" + task.getPatchCount() + ")" : "";
+				JCheckBox box = checkBox(step.getLabel() + progress, task.isDone(d.herbDone, step.getId()));
+				box.addActionListener(e -> plugin.toggleHerbStep(stepKeys));
 				herbTab.add(box);
 			}
 		}
@@ -942,9 +952,26 @@ class TreeRunningPanel extends PluginPanel
 		herbTab.add(section("Profit: this run"));
 		if (d.herbActive || d.herbPicked > 0)
 		{
-			herbTab.add(row("Herbs and crops picked", NUM.format(d.herbPicked)));
-			herbTab.add(row("Harvest value", gp(d.herbValue)));
-			herbTab.add(gpRow("Seeds, compost, payments", -d.herbCost));
+			herbTab.add(row("Picked", NUM.format(d.herbPicked)));
+			herbTab.add(gpRow("Harvest value", d.herbValue));
+			if (d.countSeeds)
+			{
+				herbTab.add(gpRow("Seeds planted", -d.herbSeedCost));
+			}
+			else
+			{
+				herbTab.add(row("Seeds planted", "not counted"));
+			}
+			for (Map.Entry<String, Integer> seed : d.herbSeeds.entrySet())
+			{
+				herbTab.add(row("  " + seed.getValue() + " × " + seed.getKey() + " seed", ""));
+			}
+			herbTab.add(gpRow("Compost", -d.herbCompostCost));
+			long payments = d.herbCost - d.herbSeedCost - d.herbCompostCost;
+			if (payments > 0)
+			{
+				herbTab.add(gpRow("Payments", -payments));
+			}
 			herbTab.add(gpRow("Profit", d.herbValue - d.herbCost));
 			herbTab.add(row("Farming XP", NUM.format(d.herbXp)));
 		}
@@ -959,14 +986,17 @@ class TreeRunningPanel extends PluginPanel
 
 		// Picker
 		herbTab.add(section("Which herb pays best"));
-		herbTab.add(text("Per patch at live prices, after the seed and compost, with the bonuses in your settings. "
-			+ "Disease-free patches do a little better.", MUTED));
+		herbTab.add(text(d.countSeeds
+			? "Per patch at live prices: the herbs you'd pick on average, minus the seed and compost, with the bonuses "
+			+ "in your settings. Disease-free patches do a little better."
+			: "Per patch at live prices: the herbs you'd pick on average, minus compost. Seed costs are off (ironman).", MUTED));
 		JPanel grid = supplyGrid();
-		addSupplyRow(grid, "Herb", "Lvl", "Profit", "XP", ColorScheme.LIGHT_GRAY_COLOR, ColorScheme.LIGHT_GRAY_COLOR);
+		addPickerRow(grid, "Herb", "Value", "Seed", "Profit", "XP", ColorScheme.LIGHT_GRAY_COLOR, ColorScheme.LIGHT_GRAY_COLOR);
 		for (HerbPlanner.Estimate e : d.picker)
 		{
-			addSupplyRow(grid, e.getHerb().getDisplayName(), String.valueOf(e.getHerb().getLevel()), gp(e.getProfit()),
-				NUM.format(Math.round(e.getXp())), Color.WHITE, e.getProfit() >= 0 ? GOOD : BAD);
+			addPickerRow(grid, e.getHerb().getDisplayName(), compact(e.getValue()),
+				d.countSeeds && e.getSeedCost() > 0 ? "−" + compact(e.getSeedCost()) : "–", gp(e.getProfit()), NUM.format(Math.round(e.getXp())),
+				d.countSeeds ? BAD : MUTED, e.getProfit() >= 0 ? GOOD : BAD);
 		}
 		herbTab.add(grid);
 	}
@@ -979,14 +1009,17 @@ class TreeRunningPanel extends PluginPanel
 			BorderFactory.createLineBorder(ColorScheme.MEDIUM_GRAY_COLOR), new EmptyBorder(3, 5, 3, 5)));
 		card.setAlignmentX(LEFT_ALIGNMENT);
 
-		String name = task.getLocation().getDisplayName() + (task.isAllotment() ? " · " + task.getLabel().replace(" allotment", "") : "");
+		String name = task.getLocation().getDisplayName() + (task.isAllotment() ? " " + task.getLabel().toLowerCase() : "");
 		JPanel left = new JPanel(new GridLayout(2, 1));
 		left.setOpaque(false);
 		JLabel title = small(name + (task.getLocation().isDiseaseFree() && !task.isAllotment() ? "  DF" : ""), Color.WHITE);
 		title.setFont(FontManager.getRunescapeBoldFont());
 		left.add(title);
 		Long est = d.herbEstimates.get(task.getKey());
-		left.add(small(task.getPlantName() + (est != null ? " · ≈ " + gp(est) : ""), task.isAllotment() ? ColorScheme.LIGHT_GRAY_COLOR : HERB));
+		left.add(small(task.isAllotment()
+			? (task.getPatchCount() > 1 ? task.getPatchCount() + " patches: " : "") + task.getPlantName()
+			: "Herb patch: " + task.getPlantName() + (est != null ? " · ≈ " + gp(est) : ""),
+			task.isAllotment() ? ColorScheme.LIGHT_GRAY_COLOR : HERB));
 		card.add(left, BorderLayout.CENTER);
 
 		String chip;
@@ -1281,6 +1314,29 @@ class TreeRunningPanel extends PluginPanel
 		grid.setOpaque(false);
 		grid.setAlignmentX(LEFT_ALIGNMENT);
 		return grid;
+	}
+
+	private static void addPickerRow(JPanel grid, String name, String value, String seed, String profit, String xp, Color seedColor,
+		Color profitColor)
+	{
+		GridBagConstraints c = new GridBagConstraints();
+		c.gridy = grid.getComponentCount() / 5;
+		c.fill = GridBagConstraints.HORIZONTAL;
+		c.insets = new Insets(1, 0, 0, 3);
+		c.gridx = 0;
+		c.weightx = 1;
+		grid.add(small(name, ColorScheme.LIGHT_GRAY_COLOR), c);
+		c.weightx = 0;
+		c.gridx = 1;
+		grid.add(fixed(value, Color.WHITE, 34), c);
+		c.gridx = 2;
+		grid.add(fixed(seed, seedColor, 36), c);
+		c.gridx = 3;
+		grid.add(fixed(profit, profitColor, 38), c);
+		c.gridx = 4;
+		c.insets = new Insets(1, 0, 0, 0);
+		grid.add(fixed(xp, MUTED, 34), c);
+		grid.setMaximumSize(new Dimension(Integer.MAX_VALUE, grid.getPreferredSize().height));
 	}
 
 	private static void addSupplyRow(JPanel grid, String name, String have, String need, String price, Color haveColor, Color needColor)

@@ -65,14 +65,17 @@ class PatchHighlightOverlay extends Overlay
 			}
 			for (HerbTask task : d.herbTasks)
 			{
-				if (!task.isDue() || d.herbDone.contains(task.stepKey(HerbTask.PLANT)))
+				if (!task.isDue())
 				{
 					continue;
 				}
-				GameObject object = objects.get(task.getKey());
-				if (object != null)
+				for (String patch : task.getPatchKeys())
 				{
-					outlines.drawOutline(object, 2, HERB, 2);
+					GameObject object = objects.get(patch);
+					if (object != null && !d.herbDone.contains(HerbTask.stepKey(patch, HerbTask.PLANT)))
+					{
+						outlines.drawOutline(object, 2, HERB, 2);
+					}
 				}
 			}
 		}

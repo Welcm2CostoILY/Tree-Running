@@ -130,6 +130,24 @@ public class PlannerTest
 
 
 	@Test
+	public void shortCropsAreTimedToo()
+	{
+		PlanSettings s = settings(CropType.YEW, CropType.PAPAYA);
+		Map<String, Long> planted = new HashMap<>();
+		String taiBwo = RunTask.keyFor(PatchLocation.CALQUAT_TAI_BWO_WANNAI, 0);
+		String kastori = RunTask.keyFor(PatchLocation.CALQUAT_KASTORI, 0);
+		// Calquat takes 21 h 20 m.
+		planted.put(taiBwo, NOW - 18 * 3_600_000L);
+		planted.put(kastori, NOW - 22 * 3_600_000L);
+		List<RunTask> tasks = RunPlanner.buildTasks(s, 90, planted, NOW);
+		assertFalse(find(tasks, PatchLocation.CALQUAT_TAI_BWO_WANNAI, 0).isDue());
+		assertTrue(find(tasks, PatchLocation.CALQUAT_TAI_BWO_WANNAI, 0).getNote().startsWith("Ready in 3h"));
+		assertTrue(find(tasks, PatchLocation.CALQUAT_KASTORI, 0).isDue());
+		// Never timed: due.
+		assertTrue(find(tasks, PatchLocation.CALQUAT_SUMMER_SHORE, 0).isDue());
+	}
+
+	@Test
 	public void supplyLinesCombineSharedPayments()
 	{
 		Map<CropType, Integer> plantings = new EnumMap<>(CropType.class);

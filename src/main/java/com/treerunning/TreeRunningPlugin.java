@@ -627,7 +627,6 @@ public class TreeRunningPlugin extends Plugin
 			return;
 		}
 		List<RunTask> tasks = currentTasks(buildSettings());
-		double minutesBetweenRuns = 1440.0 / Math.max(1, config.runsPerDay());
 		int patches = 0;
 		for (String key : state.done)
 		{
@@ -638,7 +637,7 @@ public class TreeRunningPlugin extends Plugin
 			patches++;
 			for (RunTask task : tasks)
 			{
-				if (task.getKey().equals(key) && task.getCrop().getGrowthMinutes() > minutesBetweenRuns)
+				if (task.getKey().equals(key))
 				{
 					state.plantedAt.put(key, state.tickedAt.getOrDefault(key, System.currentTimeMillis()));
 				}

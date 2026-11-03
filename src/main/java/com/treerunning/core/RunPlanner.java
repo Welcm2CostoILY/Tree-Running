@@ -28,7 +28,6 @@ public final class RunPlanner
 			.comparingInt((PatchLocation l) -> l.getStep().ordinal())
 			.thenComparingInt(Enum::ordinal));
 
-		double minutesBetweenRuns = 1440.0 / settings.getRunsPerDay();
 		List<RunTask> tasks = new ArrayList<>();
 		for (PatchLocation location : locations)
 		{
@@ -49,8 +48,10 @@ public final class RunPlanner
 					due = false;
 					note = "Needs " + crop.getLevel() + " Farming";
 				}
-				else if (crop.getGrowthMinutes() > minutesBetweenRuns)
+				else
 				{
+					// Every patch is timed from its last finished run, so a calquat (21 h) or fruit tree
+					// (16 h) planted late yesterday isn't shown as due before it can have grown.
 					Long planted = plantedAt.get(key);
 					if (planted != null)
 					{

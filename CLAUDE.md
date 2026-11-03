@@ -37,7 +37,7 @@ A RuneLite plugin for daily OSRS Farming tree runs toward a goal, such as 99 Far
 ## Rules that matter
 
 - A patch is identified by varbit **and** region, because varbits are reused, e.g. 4771.
-- Ticking only marks a patch done. Growth timers (`plantedAt`) and run XP are committed in `endRun()` when the user presses Finish run, or by the 12-hour stale auto-finish. Don't set `plantedAt` on tick, or the checkbox can't be unticked.
+- Ticking only marks a patch done. Growth timers (`plantedAt`) and run XP are committed in `endRun()` when the user presses Finish run, or by the 12-hour stale auto-finish. Don't set `plantedAt` on tick, or the checkbox can't be unticked. Every ticked patch gets a `plantedAt`, so short crops (calquat 21 h, fruit trees 16 h) aren't shown as due before they can have grown.
 - `PatchMatcher` must not fall back to route order when the player's region has a patch of that type that's already done.
 - Settings saved as JSON strings in config: `bankStops`, `stopOrder`, `patchOrder`, `travelText`.
 - Prices come from `itemManager.getItemPriceWithSource(id, true)`, the Wiki live price.

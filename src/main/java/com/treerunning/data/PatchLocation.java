@@ -16,7 +16,7 @@ public enum PatchLocation
 	TREE_FARMING_GUILD(PatchType.TREE, RouteStep.FARMING_GUILD, null, "65 Farming", 7905, Regions.FARMING_GUILD),
 	TREE_GNOME_STRONGHOLD(PatchType.TREE, RouteStep.GNOME_STRONGHOLD, null, null, 4771, Regions.GNOME_STRONGHOLD),
 	TREE_FALADOR(PatchType.TREE, RouteStep.FALADOR, null, null, 4771, 11828, 12084),
-	TREE_TAVERLEY(PatchType.TREE, RouteStep.TAVERLEY, null, "66 Agility for the Falador wall shortcut", 4771, 11573, 11829),
+	TREE_TAVERLEY(PatchType.TREE, RouteStep.TAVERLEY, null, null, 4771, 11573, 11829),
 	TREE_VARROCK(PatchType.TREE, RouteStep.VARROCK, null, null, 4771, 12854, 12853),
 	TREE_LUMBRIDGE(PatchType.TREE, RouteStep.LUMBRIDGE, null, null, 4771, 12594, 12850),
 	TREE_NEMUS_RETREAT(PatchType.TREE, RouteStep.NEMUS_RETREAT, null, "Children of the Sun", 4771, 5427, 5428, 5684),

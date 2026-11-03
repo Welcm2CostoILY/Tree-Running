@@ -78,6 +78,7 @@ import net.runelite.api.events.NpcDespawned;
 import net.runelite.api.events.NpcSpawned;
 import net.runelite.api.events.ScriptPreFired;
 import net.runelite.api.events.StatChanged;
+import net.runelite.api.events.WidgetLoaded;
 import net.runelite.api.gameval.InterfaceID;
 import net.runelite.api.gameval.InventoryID;
 import net.runelite.api.gameval.ItemID;
@@ -290,8 +291,9 @@ public class TreeRunningPlugin extends Plugin
 		loadBankStops();
 		loadRouteOrder();
 		loadTravelNotes();
-		tagManager.registerTag(TREE_TAG, id -> treeTagItems.contains(id));
-		tagManager.registerTag(HERB_TAG, id -> herbTagItems.contains(id));
+		// Bank items can be placeholders or other forms of an item, so compare canonical IDs.
+		tagManager.registerTag(TREE_TAG, id -> id >= 0 && (treeTagItems.contains(id) || treeTagItems.contains(itemManager.canonicalize(id))));
+		tagManager.registerTag(HERB_TAG, id -> id >= 0 && (herbTagItems.contains(id) || herbTagItems.contains(itemManager.canonicalize(id))));
 
 		panel = new TreeRunningPanel(this);
 		SwingUtilities.invokeLater(panel::loadRouteEditor);
@@ -598,11 +600,7 @@ public class TreeRunningPlugin extends Plugin
 	@Subscribe(priority = -1) // after the Bank Tags plugin
 	public void onScriptPreFired(ScriptPreFired event)
 	{
-		if (event.getScriptId() == ScriptID.BANKMAIN_INIT && config.bankFilter() != TreeRunningConfig.BankFilter.OFF)
-		{
-			openBankFilter();
-		}
-		else if (event.getScriptId() == ScriptID.CHATBOX_KEYINPUT_MATCHED)
+		if (event.getScriptId() == ScriptID.CHATBOX_KEYINPUT_MATCHED)
 		{
 			int[] stack = client.getIntStack();
 			Widget parent = client.getWidget(stack[0]);
@@ -612,6 +610,37 @@ public class TreeRunningPlugin extends Plugin
 				lastSelectedOption = stack[1] - 1;
 			}
 		}
+	}
+
+	/**
+	 * Opens the bank filter once the bank has finished building. Opening it any earlier (while
+	 * the bank's own setup script runs) gets undone by that script.
+	 */
+	@Subscribe
+	public void onWidgetLoaded(WidgetLoaded event)
+	{
+		if (event.getGroupId() != InterfaceID.BANKMAIN)
+		{
+			return;
+		}
+		clientThread.invokeLater(() ->
+		{
+			if (!isBankOpen())
+			{
+				return;
+			}
+			TreeRunningConfig.BankFilter mode = config.bankFilter();
+			String active = bankTagsService.getActiveTag();
+			if (mode != TreeRunningConfig.BankFilter.OFF)
+			{
+				openBankFilter(mode);
+			}
+			else if (TREE_TAG.equals(active) || HERB_TAG.equals(active))
+			{
+				// Bank Tags remembers the last tab; don't come back filtered after turning it off.
+				bankTagsService.closeBankTag();
+			}
+		});
 	}
 
 	@Subscribe
@@ -1343,14 +1372,17 @@ public class TreeRunningPlugin extends Plugin
 		{
 			return;
 		}
-		bankTagsService.openBankTag(mode == TreeRunningConfig.BankFilter.TREE ? TREE_TAG : HERB_TAG,
-			BankTagsService.OPTION_HIDE_TAG_NAME | BankTagsService.OPTION_NO_LAYOUT);
+		String tag = mode == TreeRunningConfig.BankFilter.TREE ? TREE_TAG : HERB_TAG;
+		bankTagsService.openBankTag(tag, BankTagsService.OPTION_HIDE_TAG_NAME | BankTagsService.OPTION_NO_LAYOUT);
+		debug.log(client.getTickCount(), "Bank filter opened: " + tag + " ("
+			+ (mode == TreeRunningConfig.BankFilter.TREE ? treeTagItems.size() : herbTagItems.size()) + " item IDs), active tag now "
+			+ bankTagsService.getActiveTag());
 	}
 
 	private boolean isBankOpen()
 	{
-		Widget w = client.getWidget(InterfaceID.Bankmain.UNIVERSE);
-		return w != null && !w.isHidden();
+		Widget w = client.getWidget(InterfaceID.Bankmain.ITEMS);
+		return w != null && !w.isHidden() && client.getItemContainer(InventoryID.BANK) != null;
 	}
 
 	/** Item IDs (with their charged variants) for a stop's teleport item. */

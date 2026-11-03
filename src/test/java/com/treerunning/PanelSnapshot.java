@@ -4,6 +4,15 @@ import com.treerunning.core.BankStop;
 import com.treerunning.core.Route;
 import com.treerunning.core.RunNeeds;
 import com.treerunning.core.RouteOrder;
+import com.treerunning.core.HerbPlanner;
+import com.treerunning.core.HerbSettings;
+import com.treerunning.core.HerbTask;
+import com.treerunning.core.SeenPatch;
+import com.treerunning.data.AllotmentType;
+import com.treerunning.data.Compost;
+import com.treerunning.data.HerbLocation;
+import com.treerunning.data.HerbType;
+import com.treerunning.data.PatchCondition;
 import com.treerunning.core.RunRecord;
 import java.util.ArrayList;
 import com.treerunning.core.XpTable;
@@ -107,14 +116,104 @@ public class PanelSnapshot
 		data.supplies = SupplyCalculator.compute(XpProjection.forRuns(xp, planned.getRuns(), settings).getPlantings(),
 			id -> have.getOrDefault(id, 0), id -> price.getOrDefault(id, 0L));
 		data.bankSeenAt = System.currentTimeMillis() - 2 * 3_600_000L;
+		data.slots = 27;
+		Set<String> paid = new HashSet<>();
+		paid.add(tasks.get(0).getKey());
+		data.paid = paid;
+		Set<String> unpaid = new HashSet<>();
+		unpaid.add(tasks.get(1).getKey());
+		data.unpaid = unpaid;
+		Map<String, SeenPatch> seenTrees = new HashMap<>();
+		seenTrees.put(tasks.get(5).getKey(), new SeenPatch(PatchCondition.CHECK_HEALTH, 10, 11, 40, "Yew", now - 3_600_000L));
+		seenTrees.put(tasks.get(6).getKey(), new SeenPatch(PatchCondition.DISEASED, 4, 11, 40, "Yew", now - 600_000L));
+
+		// Herbs: sample patches in a few states.
+		Map<HerbLocation, HerbType> herbs = new EnumMap<>(HerbLocation.class);
+		for (HerbLocation l : HerbLocation.values())
+		{
+			herbs.put(l, l.isDiseaseFree() ? HerbType.SNAPDRAGON : HerbType.RANARR);
+		}
+		Set<HerbLocation> on = EnumSet.allOf(HerbLocation.class);
+		on.remove(HerbLocation.HARMONY_ISLAND);
+		HerbSettings herbSettings = new HerbSettings(herbs, on, EnumSet.of(HerbLocation.CATHERBY), AllotmentType.SNAPE_GRASS,
+			false, Compost.BOTTOMLESS, 90, 0.10, 0.05, false);
+		Map<String, SeenPatch> seen = new HashMap<>(seenTrees);
+		seen.put(HerbTask.keyFor(HerbLocation.FARMING_GUILD, -1), new SeenPatch(PatchCondition.GROWN, 0, 1, 20, "Snapdragon", now - 900_000L));
+		seen.put(HerbTask.keyFor(HerbLocation.FALADOR, -1), new SeenPatch(PatchCondition.DISEASED, 2, 5, 20, "Ranarr", now - 900_000L));
+		seen.put(HerbTask.keyFor(HerbLocation.WEISS, -1), new SeenPatch(PatchCondition.GROWING, 2, 5, 20, "Snapdragon", now - 600_000L));
+		seen.put(HerbTask.keyFor(HerbLocation.CATHERBY, 0), new SeenPatch(PatchCondition.GROWING, 1, 8, 10, "Snape grass", now - 600_000L));
+		data.seen = seen;
+		Map<Integer, Long> herbPrice = new HashMap<>(price);
+		herbPrice.put(HerbType.RANARR.getSeedId(), 38_000L);
+		herbPrice.put(HerbType.RANARR.getHerbId(), 7_400L);
+		herbPrice.put(HerbType.SNAPDRAGON.getSeedId(), 60_000L);
+		herbPrice.put(HerbType.SNAPDRAGON.getHerbId(), 9_800L);
+		herbPrice.put(HerbType.TORSTOL.getSeedId(), 55_000L);
+		herbPrice.put(HerbType.TORSTOL.getHerbId(), 7_500L);
+		herbPrice.put(HerbType.TOADFLAX.getSeedId(), 3_000L);
+		herbPrice.put(HerbType.TOADFLAX.getHerbId(), 2_500L);
+		herbPrice.put(21483, 1_200L);
+		data.herbTasks = HerbPlanner.buildTasks(herbSettings, seen, now);
+		Set<String> herbDone = new HashSet<>();
+		herbDone.add(HerbTask.stepKey(HerbTask.keyFor(HerbLocation.FARMING_GUILD, -1), HerbTask.HARVEST));
+		data.herbDone = herbDone;
+		data.herbActive = true;
+		data.herbStartedAt = now - 4 * 60_000L;
+		Map<Integer, Integer> herbInv = new HashMap<>();
+		herbInv.put(HerbType.RANARR.getSeedId(), 3);
+		herbInv.put(HerbType.SNAPDRAGON.getSeedId(), 4);
+		data.herbNeeds = HerbPlanner.needs(data.herbTasks, herbDone, herbSettings, id -> herbInv.getOrDefault(id, 0));
+		data.secateursExpected = true;
+		data.secateursCarried = false;
+		data.herbPicked = 9;
+		data.herbValue = 88_200;
+		data.herbCost = 60_300;
+		data.herbXp = 973;
+		data.herbLastMatch = "Picked 9 Snapdragon at Farming Guild herb patch";
+		data.picker = HerbPlanner.picker(herbSettings, id -> herbPrice.getOrDefault(id, 0L));
+		Map<String, Long> est = new HashMap<>();
+		for (HerbTask t : data.herbTasks)
+		{
+			if (!t.isAllotment())
+			{
+				est.put(t.getKey(), HerbPlanner.estimate(t.getHerb(), t.getLocation(), herbSettings, id -> herbPrice.getOrDefault(id, 0L)).getProfit());
+			}
+		}
+		data.herbEstimates = est;
+		data.herbXpPerRun = HerbPlanner.xpPerRun(herbSettings);
+		data.herbRunsPerDay = 4;
+		List<RunRecord> herbRuns = new ArrayList<>();
+		RunRecord h1 = new RunRecord(now - 3 * 3_600_000L, 6_110, 8);
+		h1.startedAt = h1.endedAt - 9 * 60_000L;
+		h1.value = 512_000;
+		h1.cost = 361_000;
+		h1.picked = 64;
+		h1.profitTracked = true;
+		herbRuns.add(h1);
+		data.herbRuns = herbRuns;
+		RunRecord t1 = runs.get(1);
+		t1.startedAt = t1.endedAt - 14 * 60_000L;
+		t1.cost = 412_000;
+		t1.value = 96_000;
+		t1.profitTracked = true;
+		data.lastTreeRun = t1;
+		data.lastHerbRun = h1;
+		data.lifetimeHerbProfit = h1.profit();
+		data.lifetimeTreeProfit = t1.profit();
+		Map<RouteStep, List<HerbTask>> otw = new EnumMap<>(RouteStep.class);
+		for (HerbTask t : data.herbTasks)
+		{
+			if (t.getLocation() == HerbLocation.FARMING_GUILD && !t.isAllotment())
+			{
+				otw.put(RouteStep.FARMING_GUILD, java.util.Collections.singletonList(t));
+			}
+		}
+		data.onTheWay = otw;
 
 		SwingUtilities.invokeAndWait(() ->
 		{
 			TreeRunningPanel panel = new TreeRunningPanel(null);
-			// Every setting has a default, so an empty implementation is the default config.
-			panel.loadSettings(new TreeRunningConfig()
-			{
-			}, banks, RouteOrder.defaults(), travel, location -> true);
+			panel.loadRouteEditor(banks, RouteOrder.defaults(), travel, location -> location != PatchLocation.CRYSTAL_PRIFDDINAS);
 			panel.update(data);
 			JTabbedPane tabs = (JTabbedPane) panel.getComponent(0);
 			for (int i = 0; i < tabs.getTabCount(); i++)

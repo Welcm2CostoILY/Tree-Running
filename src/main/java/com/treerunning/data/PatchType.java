@@ -11,7 +11,8 @@ public enum PatchType
 	CELASTRUS("Celastrus"),
 	HARDWOOD("Hardwood"),
 	REDWOOD("Redwood"),
-	HESPORI("Hespori");
+	HESPORI("Hespori"),
+	CRYSTAL("Crystal tree");
 
 	private final String displayName;
 

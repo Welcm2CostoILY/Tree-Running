@@ -1,15 +1,16 @@
 # Tree Running
 
-A RuneLite plugin for daily tree runs toward a Farming goal: a level (99 by default) or any XP total up to 200M.
+A RuneLite plugin for daily tree runs and herb runs toward a Farming goal: a level (99 by default) or any XP total up to 200M.
 
-- **XP tab**: runs, days and a goal date. It starts from your chosen crops and switches to the average of your real runs once you finish one. Run history with a delete button per run. All settings live here too.
-- **Run tab**: a "This run needs" box with the saplings and protection items still to use, against what's in your inventory (red when you're short), then the checklist in route order with your bank stops.
-- **Supplies tab**: seeds/saplings and protection payments needed for the runs you have left, against your bank, the Farming Guild seed vault and your inventory, with the live OSRS Wiki GE price of each and the cost of what you're short.
-- **Checklist overlay**: the current stop, how to get there, and its patches and bank stops in order.
-- **Patch highlights**: due patches are outlined in the game world, the next one in bright green. An optional hint arrow points at the next patch.
-- **Exact patch tracking**: checking health or planting ticks off the patch you're at, in any order. Opening your bank ticks the next bank stop.
-- **Route & patches**: reorder stops and the patches at each stop, edit each stop's travel note, untick patches you don't use (25 in all, including Anglers' Retreat and each Fossil Island patch), and add bank stops before or after any stop's patches.
-- **Debug log**: an optional log of everything the tracker sees, for fixing missed ticks.
+- **XP tab**: runs, days and a goal date (counting herb runs too, if you set how many a day), XP per run, lifetime and last-run profit, and the tree run history with run times and a delete button per run. The route editor is here too.
+- **Trees tab**: the tree run checklist in route order with your bank stops. Each patch shows what it looked like when you last saw it (grown, check health, diseased, dead, stump), and whether you've paid its gardener. A "This run needs" box, an inventory-space warning with where to add a bank stop, and a bank filter.
+- **Herbs tab**: every herb patch you've turned on (and its allotments, if you turned those on) with its state and time left, a herb chosen per patch, "This run needs", a checklist that ticks itself (harvest, compost, plant, pay), profit for the run, herb run history, and which herb pays best per patch at live prices.
+- **Supplies tab**: seeds/saplings and protection payments needed for the tree runs you have left, against your bank, the Farming Guild seed vault and your inventory, with live OSRS Wiki prices.
+- **Bank filter**: shows only what the run needs. Turn it on in the Trees or Herbs tab, or from the right-click menu on the bank's "Show worn items" button.
+- **Overlays**: the current stop and its patches, unpaid gardeners, and herbs on the way. Due patches are outlined in game (the next tree patch in bright green), and gardeners you haven't paid are outlined in orange. An optional hint arrow points at the next patch.
+- **Herbs on the way** (off by default): grown herb patches at Farming Guild, Catherby and Falador are added to those tree-run stops.
+- **Notification** when all your herb patches should be grown.
+- **Settings** are in RuneLite's configuration panel (the wrench, then Tree Running): goal, crops, tree patches (26, including an optional crystal tree), herb runs, each herb patch's herb and allotments, overlays and the debug log.
 
 Built and compiled against RuneLite 1.13.4.
 
@@ -25,22 +26,22 @@ From a terminal, `./gradlew runClient` (or `gradlew.bat runClient` on Windows) d
 
 ## First-time setup in game
 
-1. Open the **XP** tab and scroll to **Settings**. Pick your crops and your goal, untick any patches you can't use, and add bank stops where you restock.
+1. Open RuneLite's settings (the wrench), then **Tree Running**. Pick your goal and crops, untick tree patches you can't use, turn on your herb patches and pick a herb for each (your best seeds in the disease-free ones), and set your compost and diary bonuses. Back in the side panel, add bank stops in the **Route editor** at the bottom of the XP tab.
 2. **Open your bank and the Farming Guild seed vault once.** That's how the supply tracker learns what you have. Each updates every time you open it.
-3. Check your route under **Route & patches**. The travel notes assume a maxed house (jewellery box, portal nexus, spirit trees); type your own where yours differ.
+3. Check your route under the **Route editor**. The travel notes assume a maxed house (jewellery box, portal nexus, spirit trees); type your own where yours differ.
 4. Do your run. Checking health or planting ticks off that patch, and opening your bank ticks the next bank stop. Press **Finish run** at the end.
 
 ## How it tracks things
 
-- **Which patch**: the plugin watches each patch's game state (its varbit) and the map region you're standing in, using the same patch data as RuneLite's built-in Time Tracking plugin. When Farming XP arrives (check-health, planting, harvesting a Hespori) within a tick of exactly one patch changing where you're standing, that patch is ticked. The three Fossil Island patches are told apart the same way.
-- **Backup**: if that's ambiguous, a sapling leaving your inventory followed by Farming XP ticks the patch that changed. If it can't place you at all (somewhere it has no data for), it falls back to the next patch of that type in route order and says so. It never ticks a far-away patch when the patch where you're standing is already done.
-- **Checking it**: the Run tab shows "Last ticked:" with the patch. You can tick or untick any box by hand, including Hespori and hardwood.
-- **Runs**: a run starts at the first tick and includes the Farming XP from the few ticks before it. It's saved to your history, and growth timers start, when you press **Finish run**. If you forget, it finishes itself 12 hours after its last tick (less if you do more runs a day). **New run** saves the current run first.
-- **Long-growing patches**: hardwood (85.3 h for ironwood), redwood (106.7 h) and Hespori (32 h) are timed from when you ticked them in a finished run. They show "Ready in…" until they're grown.
-- **XP countdown**: it averages your last 5 runs by default (setting: *Average over last N runs*). Before you've finished a run, it uses the plan.
-- **Bank stops**: opening your bank during a run ticks the next bank stop, but only when a bank stop is the next thing on the route. You can always tick it by hand.
-- **Prices**: the OSRS Wiki's live prices, which RuneLite downloads and refreshes itself. Hespori seeds can't be traded, so they show "–".
-- **Saved data**: progress, run history and the bank and seed vault counts are saved per account in your RuneLite profile. Settings and bank stops are saved in your RuneLite settings.
+- **Patch states**: every tree, herb and allotment patch's game state (its varbit) is read while you're near it, using RuneLite's own Time Tracking data, so the plugin knows when it's grown, still growing, diseased, dead or a stump. A patch seen growing isn't due until it can have finished.
+- **Tree patches**: Farming XP that arrives with a check-health or a planting at the patch you're standing at ticks it, in any order. Raking weeds doesn't. If that's ambiguous, a sapling leaving your inventory with Farming XP ticks it instead.
+- **Payments**: when a gardener says "Leave it with me", that patch is marked paid (also the Falador elite diary's free protection). A planted patch that isn't paid is shown in orange and its gardener is outlined.
+- **Herb runs**: planting, the last pick and curing or clearing tick themselves from the patch's state. Each pick before that counts from its Farming XP. Compost ticks from the "You treat the herb patch with..." message. Profit is herbs picked at live prices, minus the seeds, compost and allotment payments used.
+- **Runs**: a run starts at the first tick and ends when you press **Finish run** (tree runs finish themselves 12 hours after the last tick, herb runs after 2 hours). Its time and profit go to the history.
+- **Long-growing patches**: every tree patch is timed from when you ticked it on a finished run, and from what you last saw of it.
+- **Prices**: the OSRS Wiki's live prices, which RuneLite downloads itself. Saplings aren't traded, so a planting costs its seed. Hespori seeds and crystal shards can't be traded.
+- **Herb estimates**: expected herbs per patch use the OSRS Wiki's formula for your Farming level, compost, magic secateurs, farming cape and diary bonuses, with disease-free patches always surviving.
+- **Saved data**: progress, patch states, run history and bank and seed vault counts are saved per account in your RuneLite profile. Settings are saved in your RuneLite settings.
 
 ## Debug log
 

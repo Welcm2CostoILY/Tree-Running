@@ -96,7 +96,12 @@ public enum CropType
 		item("Redwood sapling", ItemID.PLANTPOT_REDWOOD_TREE_SAPLING), item("Dragonfruit", ItemID.DRAGONFRUIT), 6, null),
 	// Hespori: 62 for planting + 12,600 for harvesting after the kill. The seed is planted directly.
 	HESPORI(PatchType.HESPORI, "Hespori", 65, 12662, 1920,
-		item("Hespori seed", ItemID.HESPORI_SEED), -1, -1, null, null, 0, null);
+		item("Hespori seed", ItemID.HESPORI_SEED), -1, -1, null, null, 0, null),
+	// Crystal tree: 126 for planting + 13,240 for checking (OSRS Wiki). It can't get diseased,
+	// so there's no payment, and its shards are untradeable.
+	CRYSTAL(PatchType.CRYSTAL, "Crystal", 74, 13366, 480,
+		item("Crystal acorn", ItemID.CRYSTAL_TREE_SEED), ItemID.PLANTPOT_CRYSTAL_TREE_SEED, ItemID.PLANTPOT_CRYSTAL_TREE_SEED_WATERED,
+		item("Crystal sapling", ItemID.PLANTPOT_CRYSTAL_TREE_SAPLING), null, 0, null);
 
 	/** An item's display name and unnoted item ID. */
 	public static final class Item

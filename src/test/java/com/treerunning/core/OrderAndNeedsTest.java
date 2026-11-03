@@ -202,21 +202,20 @@ public class OrderAndNeedsTest
 	public void xpWithOnePatchChangeMatches()
 	{
 		List<ActionMatcher.Change> changes = Arrays.asList(
-			new ActionMatcher.Change(100, PatchLocation.TREE_FALADOR),
-			new ActionMatcher.Change(90, PatchLocation.TREE_VARROCK));
-		assertSame(PatchLocation.TREE_FALADOR, ActionMatcher.find(101, changes, EnumSet.noneOf(PatchLocation.class)));
-		assertNull(ActionMatcher.find(103, changes, EnumSet.noneOf(PatchLocation.class)));
+			new ActionMatcher.Change(100, "TREE_FALADOR#0"),
+			new ActionMatcher.Change(90, "TREE_VARROCK#0"));
+		assertEquals("TREE_FALADOR#0", ActionMatcher.find(101, changes, new HashSet<>()));
+		assertNull(ActionMatcher.find(103, changes, new HashSet<>()));
 	}
 
 	@Test
 	public void twoChangesAtOnceAreTooAmbiguous()
 	{
 		List<ActionMatcher.Change> changes = Arrays.asList(
-			new ActionMatcher.Change(100, PatchLocation.HARDWOOD_FOSSIL_ISLAND_EAST),
-			new ActionMatcher.Change(100, PatchLocation.HARDWOOD_FOSSIL_ISLAND_WEST));
-		assertNull(ActionMatcher.find(100, changes, EnumSet.noneOf(PatchLocation.class)));
+			new ActionMatcher.Change(100, "east"),
+			new ActionMatcher.Change(100, "west"));
+		assertNull(ActionMatcher.find(100, changes, new HashSet<>()));
 		// Unless one of them is already done.
-		assertSame(PatchLocation.HARDWOOD_FOSSIL_ISLAND_WEST,
-			ActionMatcher.find(100, changes, EnumSet.of(PatchLocation.HARDWOOD_FOSSIL_ISLAND_EAST)));
+		assertEquals("west", ActionMatcher.find(100, changes, new HashSet<>(Collections.singletonList("east"))));
 	}
 }

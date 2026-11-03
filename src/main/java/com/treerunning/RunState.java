@@ -1,6 +1,7 @@
 package com.treerunning;
 
 import com.treerunning.core.RunRecord;
+import com.treerunning.core.SeenPatch;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -40,6 +41,28 @@ class RunState
 	Map<Integer, Integer> vault = new HashMap<>();
 	long vaultSeenAt;
 
+	/** What each patch (tree, herb or allotment) looked like when last seen, by patch key. */
+	Map<String, SeenPatch> seen = new HashMap<>();
+	/** Patches whose gardener was paid on the current tree or herb run. */
+	Set<String> paid = new HashSet<>();
+	/** Produce picked on the current tree run (fruit, bark), by item ID. */
+	Map<Integer, Integer> treeProduce = new HashMap<>();
+
+	// Herb runs
+	boolean herbActive;
+	int herbStartXp;
+	long herbStartedAt;
+	long herbLastTickAt;
+	/** Steps done on the current herb run ("herb:FALADOR|plant"). */
+	Set<String> herbDone = new HashSet<>();
+	int herbPicked;
+	long herbValue;
+	long herbCost;
+	int herbXp;
+	List<RunRecord> herbRuns = new ArrayList<>();
+	/** The "all grown" time already notified about, so it's only sent once. */
+	long herbNotifiedFor;
+
 	/** Gson leaves missing fields null when loading older saves. */
 	void fillDefaults()
 	{
@@ -69,6 +92,26 @@ class RunState
 				}
 			}
 			runXp = null;
+		}
+		if (seen == null)
+		{
+			seen = new HashMap<>();
+		}
+		if (paid == null)
+		{
+			paid = new HashSet<>();
+		}
+		if (treeProduce == null)
+		{
+			treeProduce = new HashMap<>();
+		}
+		if (herbDone == null)
+		{
+			herbDone = new HashSet<>();
+		}
+		if (herbRuns == null)
+		{
+			herbRuns = new ArrayList<>();
 		}
 		if (bank == null)
 		{

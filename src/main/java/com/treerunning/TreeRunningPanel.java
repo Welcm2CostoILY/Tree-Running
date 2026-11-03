@@ -1,14 +1,19 @@
 package com.treerunning;
 
 import com.treerunning.core.BankStop;
+import com.treerunning.core.HerbPlanner;
+import com.treerunning.core.HerbTask;
 import com.treerunning.core.RouteItem;
 import com.treerunning.core.RouteOrder;
 import com.treerunning.core.RunNeeds;
 import com.treerunning.core.RunRecord;
 import com.treerunning.core.RunTask;
+import com.treerunning.core.SeenPatch;
 import com.treerunning.core.SupplyCalculator;
 import com.treerunning.core.XpTable;
 import com.treerunning.data.CropType;
+import com.treerunning.data.HerbLocation;
+import com.treerunning.data.PatchCondition;
 import com.treerunning.data.PatchLocation;
 import com.treerunning.data.PatchType;
 import com.treerunning.data.RouteStep;
@@ -19,14 +24,13 @@ import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.GridLayout;
 import java.awt.Insets;
-import java.awt.event.FocusAdapter;
-import java.awt.event.FocusEvent;
 import java.text.NumberFormat;
-import java.time.LocalDate;
-import java.time.format.DateTimeFormatter;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
@@ -42,12 +46,10 @@ import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JProgressBar;
 import javax.swing.JScrollPane;
-import javax.swing.JSpinner;
 import javax.swing.JTabbedPane;
 import javax.swing.JTextField;
 import javax.swing.Scrollable;
 import javax.swing.ScrollPaneConstants;
-import javax.swing.SpinnerNumberModel;
 import javax.swing.SwingConstants;
 import javax.swing.Timer;
 import javax.swing.border.EmptyBorder;
@@ -58,16 +60,23 @@ import net.runelite.client.ui.FontManager;
 import net.runelite.client.ui.PluginPanel;
 
 /**
- * Side panel with three tabs: XP (progress and all settings), Run and Supplies.
+ * Side panel with four tabs: XP (progress, profit, history and the route editor), Trees,
+ * Herbs and Supplies. Settings are in RuneLite's own configuration panel.
  */
 class TreeRunningPanel extends PluginPanel
 {
 	private static final NumberFormat NUM = NumberFormat.getIntegerInstance();
 	private static final Color GOOD = new Color(0x6C, 0xC2, 0x4A);
 	private static final Color BAD = new Color(0xE0, 0x6C, 0x5A);
+	private static final Color WARN = new Color(0xE8, 0xC3, 0x4A);
 	private static final Color MUTED = ColorScheme.MEDIUM_GRAY_COLOR;
 	private static final Color BANK = TreeRunningOverlay.BANK;
+	private static final Color HERB = TreeRunningOverlay.HERB;
+	private static final Color PAY = TreeRunningOverlay.PAY;
+	private static final Color DF = new Color(0x7C, 0xC4, 0xFF);
 	private static final int TEXT_WIDTH = 165;
+	private static final DateTimeFormatter WHEN = DateTimeFormatter.ofPattern("MMM d, HH:mm");
+	private static final DateTimeFormatter CLOCK = DateTimeFormatter.ofPattern("HH:mm");
 
 	/** Patch type colors for the "This run needs" box. */
 	private static final Map<PatchType, Color> TYPE_COLORS = new EnumMap<>(PatchType.class);
@@ -81,6 +90,7 @@ class TreeRunningPanel extends PluginPanel
 		TYPE_COLORS.put(PatchType.CELASTRUS, new Color(0xC3, 0xA6, 0xF2));
 		TYPE_COLORS.put(PatchType.REDWOOD, new Color(0xEF, 0x7D, 0x6B));
 		TYPE_COLORS.put(PatchType.HESPORI, new Color(0x6F, 0xD8, 0xC6));
+		TYPE_COLORS.put(PatchType.CRYSTAL, new Color(0x8F, 0xE3, 0xE8));
 	}
 
 	private final TreeRunningPlugin plugin;
@@ -88,15 +98,15 @@ class TreeRunningPanel extends PluginPanel
 	private final JPanel settingsPanel = column();
 	private final JPanel routePanel = column();
 	private final JPanel runTab = column();
+	private final JPanel herbTab = column();
 	private final JPanel suppliesTab = column();
 
-	/** True while settings are being filled in, so their listeners don't save. */
+	/** True while the route editor is being filled in, so its listeners don't save. */
 	private boolean loading;
 	private List<BankStop> bankStops = new ArrayList<>();
 	private final Timer bankSaveTimer;
 	private Predicate<PatchLocation> patchEnabled = location -> true;
 	private RouteOrder routeOrder = RouteOrder.defaults();
-	/** Travel notes the player typed, by stop. */
 	private Map<RouteStep, String> travelNotes = new EnumMap<>(RouteStep.class);
 	private final Timer travelSaveTimer;
 
@@ -118,31 +128,33 @@ class TreeRunningPanel extends PluginPanel
 
 		JTabbedPane tabs = new JTabbedPane();
 		tabs.addTab("XP", scroll(xpTab));
-		tabs.addTab("Run", scroll(runTab));
+		tabs.addTab("Trees", scroll(runTab));
+		tabs.addTab("Herbs", scroll(herbTab));
 		tabs.addTab("Supplies", scroll(suppliesTab));
 		add(tabs, BorderLayout.CENTER);
 
 		update(PanelData.EMPTY);
 	}
 
-	/** Redraws the parts that change with the game. Settings are left alone so typing isn't interrupted. */
+	/** Redraws the parts that change with the game. The route editor is left alone so typing isn't interrupted. */
 	void update(PanelData d)
 	{
 		buildStats(d);
 		buildRun(d);
+		buildHerbs(d);
 		buildSupplies(d);
 		revalidate();
 		repaint();
 	}
 
-	/** Run tab and overlay label: just the crop, plus East/Middle/West where a stop has several. */
+	/** Trees tab and overlay label: just the crop, plus East/Middle/West where a stop has several. */
 	static String patchLabel(RunTask task)
 	{
 		String patch = task.getLocation().getPatchName();
 		return task.getCrop().getDisplayName() + (patch != null ? " (" + patch + ")" : "");
 	}
 
-	// ------------------------------------------------------------------ XP tab: progress
+	// ------------------------------------------------------------------ XP tab: progress, profit, history
 
 	private void buildStats(PanelData d)
 	{
@@ -160,7 +172,6 @@ class TreeRunningPanel extends PluginPanel
 			statsPanel.add(row("Current XP", NUM.format(d.currentXp) + " (level " + d.level + ")"));
 		}
 
-		// Level goals fill the bar from the start of your current level, XP goals from zero.
 		int base = byLevel ? XpTable.xpForLevel(Math.min(d.level, d.goalLevel)) : 0;
 		double span = Math.max(1, d.goalXp - base);
 		JProgressBar bar = new JProgressBar(0, 1000);
@@ -177,10 +188,20 @@ class TreeRunningPanel extends PluginPanel
 		if (d.xpRemaining() == 0)
 		{
 			statsPanel.add(text("Goal reached." + (d.level >= 99 ? " Enjoy the cape!" : ""), GOOD));
-			return;
 		}
-
-		if (d.runsLeft > 0)
+		else if (d.herbRunsPerDay > 0 && d.daysLeft() > 0)
+		{
+			int days = d.daysLeft();
+			statsPanel.add(big(days + " days left"));
+			statsPanel.add(text("With " + d.runsPerDay + " tree run" + (d.runsPerDay == 1 ? "" : "s") + " and "
+				+ d.herbRunsPerDay + " herb run" + (d.herbRunsPerDay == 1 ? "" : "s") + " a day.", MUTED));
+			statsPanel.add(row("Goal date", LocalDate.now().plusDays(days).format(DateTimeFormatter.ofPattern("MMM d, yyyy"))));
+			if (d.runsLeft > 0)
+			{
+				statsPanel.add(row("Trees only", (int) Math.ceil(d.runsLeft / (double) d.runsPerDay) + " days"));
+			}
+		}
+		else if (d.runsLeft > 0)
 		{
 			int days = (int) Math.ceil(d.runsLeft / (double) d.runsPerDay);
 			statsPanel.add(big(d.runsLeft + " runs left"));
@@ -192,74 +213,115 @@ class TreeRunningPanel extends PluginPanel
 		}
 		else
 		{
-			statsPanel.add(text("Your current plan can't reach this goal. Check your crops and patches.", BAD));
+			statsPanel.add(text("Your current plan can't reach this goal. Check your crops and patches in the settings.", BAD));
 		}
 
 		statsPanel.add(Box.createVerticalStrut(6));
 		statsPanel.add(heading("XP per run"));
-		statsPanel.add(row("Your average", d.actualXpPerRun > 0 ? NUM.format(Math.round(d.actualXpPerRun)) : "–"));
-		statsPanel.add(row("Planned", NUM.format(Math.round(d.plannedXpPerRun))));
-		statsPanel.add(row("Planned runs", d.plannedRuns > 0 ? String.valueOf(d.plannedRuns) : "–"));
+		statsPanel.add(row("Tree run: your average", d.actualXpPerRun > 0 ? NUM.format(Math.round(d.actualXpPerRun)) : "–"));
+		statsPanel.add(row("Tree run: planned", NUM.format(Math.round(d.plannedXpPerRun))));
+		statsPanel.add(row("Herb run: estimate", d.herbXpPerRun > 0 ? NUM.format(Math.round(d.herbXpPerRun)) : "–"));
 		if (d.runActive)
 		{
-			statsPanel.add(row("This run so far", NUM.format(d.runXpSoFar)));
+			statsPanel.add(row("This tree run so far", NUM.format(d.runXpSoFar)));
 		}
 
 		statsPanel.add(Box.createVerticalStrut(6));
-		statsPanel.add(heading("Run history"));
-		if (d.runs.isEmpty())
+		statsPanel.add(heading("Profit"));
+		long lifetime = d.lifetimeTreeProfit + d.lifetimeHerbProfit;
+		statsPanel.add(gpRow("Lifetime", lifetime));
+		statsPanel.add(gpRow("  Herb runs", d.lifetimeHerbProfit));
+		statsPanel.add(gpRow("  Tree runs", d.lifetimeTreeProfit));
+		statsPanel.add(d.lastHerbRun != null ? gpRow("Last herb run", d.lastHerbRun.profit()) : row("Last herb run", "–"));
+		statsPanel.add(d.lastTreeRun != null ? gpRow("Last tree run", d.lastTreeRun.profit()) : row("Last tree run", "–"));
+		statsPanel.add(text("Harvests at live prices, minus seeds, compost and payments. Tree runs count fruit and bark "
+			+ "picked, against each sapling's seed and the payments you made. Runs from before this version aren't counted.", MUTED));
+
+		statsPanel.add(Box.createVerticalStrut(6));
+		statsPanel.add(heading("Tree run history"));
+		addHistory(statsPanel, d.runs, i -> plugin.deleteRun(i), () -> plugin.clearHistory(), false);
+	}
+
+	private void addHistory(JPanel panel, List<RunRecord> runs, java.util.function.IntConsumer delete, Runnable clearAll, boolean herbs)
+	{
+		if (runs.isEmpty())
 		{
-			statsPanel.add(text("No finished runs yet. Press Finish run at the end of a run to save it here.", MUTED));
+			panel.add(text("No finished runs yet. Press Finish run at the end of a run to save it here.", MUTED));
 			return;
 		}
-		DateTimeFormatter when = DateTimeFormatter.ofPattern("MMM d, HH:mm");
-		// Newest first; the index is the run's place in the saved list.
 		int shown = 0;
-		for (int i = d.runs.size() - 1; i >= 0 && shown < 30; i--, shown++)
+		for (int i = runs.size() - 1; i >= 0 && shown < 30; i--, shown++)
 		{
-			RunRecord run = d.runs.get(i);
+			RunRecord run = runs.get(i);
 			int index = i;
-			String date = run.endedAt > 0
-				? Instant.ofEpochMilli(run.endedAt).atZone(ZoneId.systemDefault()).format(when)
-				: "Earlier run";
-			statsPanel.add(historyRow(date, NUM.format(run.xp) + " XP" + (run.patches > 0 ? " · " + run.patches : ""),
-				() -> plugin.deleteRun(index)));
+			String date = run.endedAt > 0 ? Instant.ofEpochMilli(run.endedAt).atZone(ZoneId.systemDefault()).format(WHEN) : "Earlier run";
+			StringBuilder value = new StringBuilder(NUM.format(run.xp) + " XP");
+			if (run.patches > 0)
+			{
+				value.append(" · ").append(run.patches);
+			}
+			long ms = run.durationMs();
+			long best = RunRecord.bestTime(runs, run.patches);
+			StringBuilder second = new StringBuilder();
+			if (ms > 0)
+			{
+				second.append(duration(ms)).append(ms == best ? " (best)" : "");
+			}
+			if (run.profitTracked)
+			{
+				second.append(second.length() > 0 ? " · " : "").append(gp(run.profit()));
+				if (herbs && run.picked > 0)
+				{
+					second.append(" · ").append(run.picked).append(" picked");
+				}
+			}
+			panel.add(historyRow(date, value.toString(), second.toString(), () -> delete.accept(index)));
 		}
-		if (d.runs.size() > 30)
+		if (runs.size() > 30)
 		{
-			statsPanel.add(text((d.runs.size() - 30) + " older runs not shown.", MUTED));
+			panel.add(text((runs.size() - 30) + " older runs not shown.", MUTED));
 		}
 		JButton clear = button("Clear all history");
-		clear.addActionListener(e -> plugin.clearHistory());
-		statsPanel.add(Box.createVerticalStrut(4));
-		statsPanel.add(clear);
+		clear.addActionListener(e -> clearAll.run());
+		panel.add(Box.createVerticalStrut(4));
+		panel.add(clear);
 	}
 
-	private static JPanel historyRow(String date, String value, Runnable delete)
+	private static JPanel historyRow(String date, String value, String second, Runnable delete)
 	{
-		JPanel panel = new JPanel(new BorderLayout(4, 0));
-		panel.setOpaque(false);
-		panel.add(small(date, ColorScheme.LIGHT_GRAY_COLOR), BorderLayout.WEST);
-		panel.add(number(value), BorderLayout.CENTER);
+		JPanel outer = new JPanel(new BorderLayout(4, 0));
+		outer.setOpaque(false);
+		JPanel lines = new JPanel(new GridLayout(second.isEmpty() ? 1 : 2, 1));
+		lines.setOpaque(false);
+		JPanel top = new JPanel(new BorderLayout(4, 0));
+		top.setOpaque(false);
+		top.add(small(date, ColorScheme.LIGHT_GRAY_COLOR), BorderLayout.WEST);
+		top.add(number(value), BorderLayout.CENTER);
+		lines.add(top);
+		if (!second.isEmpty())
+		{
+			JLabel l = small(second, MUTED);
+			l.setHorizontalAlignment(SwingConstants.RIGHT);
+			lines.add(l);
+		}
+		outer.add(lines, BorderLayout.CENTER);
 		JButton remove = tinyButton("✕", "Delete this run");
 		remove.addActionListener(e -> delete.run());
-		panel.add(remove, BorderLayout.EAST);
-		panel.setMaximumSize(new Dimension(Integer.MAX_VALUE, 20));
-		panel.setAlignmentX(LEFT_ALIGNMENT);
-		return panel;
+		outer.add(remove, BorderLayout.EAST);
+		outer.setMaximumSize(new Dimension(Integer.MAX_VALUE, second.isEmpty() ? 20 : 34));
+		outer.setAlignmentX(LEFT_ALIGNMENT);
+		return outer;
 	}
 
-	// ------------------------------------------------------------------ XP tab: settings
+	// ------------------------------------------------------------------ XP tab: settings note and route editor
 
-	/** Builds the settings from the saved values. Called once at startup, on the Swing thread. */
-	void loadSettings()
+	/** Builds the route editor from the saved values. Called once at startup, on the Swing thread. */
+	void loadRouteEditor()
 	{
-		loadSettings(plugin.getConfig(), plugin.getBankStops(), plugin.getRouteOrder(), plugin.getTravelNotes(),
-			plugin::isPatchEnabled);
+		loadRouteEditor(plugin.getBankStops(), plugin.getRouteOrder(), plugin.getTravelNotes(), plugin::isPatchEnabled);
 	}
 
-	void loadSettings(TreeRunningConfig config, List<BankStop> stops, RouteOrder order, Map<RouteStep, String> travel,
-		Predicate<PatchLocation> patchEnabled)
+	void loadRouteEditor(List<BankStop> stops, RouteOrder order, Map<RouteStep, String> travel, Predicate<PatchLocation> patchEnabled)
 	{
 		loading = true;
 		try
@@ -268,9 +330,19 @@ class TreeRunningPanel extends PluginPanel
 			this.routeOrder = order;
 			this.travelNotes = new EnumMap<>(RouteStep.class);
 			this.travelNotes.putAll(travel);
-			buildSettings(config);
+			settingsPanel.removeAll();
+			settingsPanel.setBorder(BorderFactory.createCompoundBorder(
+				BorderFactory.createMatteBorder(1, 0, 0, 0, ColorScheme.MEDIUM_GRAY_COLOR), new EmptyBorder(8, 0, 0, 0)));
+			settingsPanel.add(Box.createVerticalStrut(10));
+			settingsPanel.add(heading("Settings have moved"));
+			settingsPanel.add(text("Crops, goal, patches, herbs, overlays and the debug log are now in RuneLite's settings: "
+				+ "click the wrench (Configuration) at the top of the side bar, then Tree Running. The route editor stays here.", WARN));
+			settingsPanel.add(section("Route editor"));
+			settingsPanel.add(text("▲▼ move a stop or a patch. The line under each stop is the travel note shown in the run; "
+				+ "type your own. Add bank stops where you restock. Turn patches on or off in the settings.", MUTED));
 			bankStops = new ArrayList<>(stops);
 			buildRoute();
+			settingsPanel.add(routePanel);
 		}
 		finally
 		{
@@ -280,94 +352,6 @@ class TreeRunningPanel extends PluginPanel
 		repaint();
 	}
 
-	private void buildSettings(TreeRunningConfig config)
-	{
-		settingsPanel.removeAll();
-		settingsPanel.setBorder(BorderFactory.createCompoundBorder(
-			BorderFactory.createMatteBorder(1, 0, 0, 0, ColorScheme.MEDIUM_GRAY_COLOR), new EmptyBorder(8, 0, 0, 0)));
-		settingsPanel.add(Box.createVerticalStrut(10));
-		settingsPanel.add(heading("Settings"));
-
-		settingsPanel.add(section("Crops"));
-		settingsPanel.add(field("Tree patches", combo(CropChoices.Tree.values(), config.treeCrop(), "treeCrop")));
-		settingsPanel.add(field("Fruit tree patches", combo(CropChoices.Fruit.values(), config.fruitCrop(), "fruitCrop")));
-		settingsPanel.add(field("Hardwood patches", combo(CropChoices.Hardwood.values(), config.hardwoodCrop(), "hardwoodCrop")));
-
-		settingsPanel.add(section("Goal"));
-		JComboBox<TreeRunningConfig.GoalType> goalType = new JComboBox<>(TreeRunningConfig.GoalType.values());
-		goalType.setSelectedItem(config.goalType());
-		JSpinner goalLevel = spinner(config.goalLevel(), 2, 99, "goalLevel");
-		JTextField goalXp = new JTextField(NUM.format(config.goalXp()));
-		styleInput(goalXp);
-		JComponent levelRow = field("Goal level", goalLevel);
-		JComponent xpRow = field("Goal XP", goalXp);
-		JLabel xpHint = text("Any amount up to 200,000,000. 99 is 13,034,431.", MUTED);
-		Runnable showGoalRows = () ->
-		{
-			boolean byXp = goalType.getSelectedItem() == TreeRunningConfig.GoalType.XP;
-			levelRow.setVisible(!byXp);
-			xpRow.setVisible(byXp);
-			xpHint.setVisible(byXp);
-			settingsPanel.revalidate();
-		};
-		goalType.addActionListener(e ->
-		{
-			showGoalRows.run();
-			if (!loading)
-			{
-				plugin.setSetting("goalType", goalType.getSelectedItem());
-			}
-		});
-		Runnable saveGoalXp = () ->
-		{
-			String digits = goalXp.getText().replaceAll("[^0-9]", "");
-			if (digits.isEmpty())
-			{
-				goalXp.setText(NUM.format(plugin.getConfig().goalXp()));
-				return;
-			}
-			long value = Math.max(1, Math.min(200_000_000L, Long.parseLong(digits.length() > 10 ? "9999999999" : digits)));
-			goalXp.setText(NUM.format(value));
-			if (!loading)
-			{
-				plugin.setSetting("goalXp", (int) value);
-			}
-		};
-		goalXp.addActionListener(e -> saveGoalXp.run());
-		goalXp.addFocusListener(new FocusAdapter()
-		{
-			@Override
-			public void focusLost(FocusEvent e)
-			{
-				saveGoalXp.run();
-			}
-		});
-		settingsPanel.add(field("Goal type", goalType));
-		settingsPanel.add(levelRow);
-		settingsPanel.add(xpRow);
-		settingsPanel.add(xpHint);
-		settingsPanel.add(field("Runs per day", spinner(config.runsPerDay(), 1, 4, "runsPerDay")));
-		showGoalRows.run();
-
-		settingsPanel.add(section("Overlay"));
-		settingsPanel.add(checkField("Show checklist overlay", config.showOverlay(), "showOverlay"));
-		settingsPanel.add(checkField("Only during a run", config.overlayOnlyDuringRun(), "overlayOnlyDuringRun"));
-		settingsPanel.add(checkField("Highlight patches in game", config.highlightPatches(), "highlightPatches"));
-		settingsPanel.add(checkField("Hint arrow to next patch", config.hintArrow(), "hintArrow"));
-		settingsPanel.add(text("Highlights show once a patch is loaded nearby. The next patch is bright green.", MUTED));
-
-		settingsPanel.add(section("Route & patches"));
-		settingsPanel.add(text("▲▼ move a stop or a patch. The line under each stop is the travel note shown in the run; "
-			+ "type your own. Untick patches you don't use, and add bank stops where you restock.", MUTED));
-		settingsPanel.add(routePanel);
-
-		settingsPanel.add(section("Debug"));
-		settingsPanel.add(checkField("Debug log", config.debugLog(), "debugLog"));
-		settingsPanel.add(text("Writes what the tracker sees to RuneLite's log, .runelite/logs/client.log, on lines "
-			+ "starting with [Tree Running]. Turn it on for a few runs if ticking misses a patch, then send that file.", MUTED));
-	}
-
-	/** The route editor: every stop, its patches, and its bank stops before or after them. */
 	private void buildRoute()
 	{
 		routePanel.removeAll();
@@ -396,18 +380,12 @@ class TreeRunningPanel extends PluginPanel
 				PatchLocation location = locations.get(p);
 				String label = location.getPatchType().getDisplayName()
 					+ (location.getPatchName() != null ? " (" + location.getPatchName() + ")" : "");
-				JCheckBox box = checkBox(label, patchEnabled.test(location));
+				boolean on = patchEnabled.test(location);
+				JLabel box = small("  " + label + (on ? "" : " (off in settings)"), on ? Color.WHITE : MUTED);
 				if (location.getRequirement() != null)
 				{
 					box.setToolTipText("Requires " + location.getRequirement());
 				}
-				box.addActionListener(e ->
-				{
-					if (!loading)
-					{
-						plugin.setPatchEnabled(location, box.isSelected());
-					}
-				});
 				routePanel.add(locations.size() < 2 ? box : withArrows(box, p > 0, p < locations.size() - 1,
 					() -> moveRoute(routeOrder.movePatch(location, -1)), () -> moveRoute(routeOrder.movePatch(location, 1)),
 					"patch"));
@@ -629,7 +607,8 @@ class TreeRunningPanel extends PluginPanel
 		}
 	}
 
-	// ------------------------------------------------------------------ Run tab
+
+	// ------------------------------------------------------------------ Trees tab
 
 	private void buildRun(PanelData d)
 	{
@@ -643,21 +622,15 @@ class TreeRunningPanel extends PluginPanel
 		runTab.add(heading(d.runActive
 			? "Run in progress: " + d.doneCount() + "/" + d.dueCount()
 			: "Ready: " + d.dueCount() + " patches due"));
+		if (d.runActive && d.runStartedAt > 0)
+		{
+			runTab.add(text("Started " + Instant.ofEpochMilli(d.runStartedAt).atZone(ZoneId.systemDefault()).format(CLOCK)
+				+ " · " + duration(System.currentTimeMillis() - d.runStartedAt) + " so far", MUTED));
+		}
 
-		JPanel buttons = new JPanel(new GridLayout(1, 2, 4, 0));
-		buttons.setOpaque(false);
-		JButton start = button("New run");
-		start.addActionListener(e -> plugin.startNewRun());
-		JButton finish = button("Finish run");
-		finish.setEnabled(d.runActive);
-		finish.addActionListener(e -> plugin.finishRun());
-		buttons.add(start);
-		buttons.add(finish);
-		buttons.setMaximumSize(new Dimension(Integer.MAX_VALUE, 26));
-		buttons.setAlignmentX(LEFT_ALIGNMENT);
-		runTab.add(buttons);
+		runTab.add(runButtons(() -> plugin.startNewRun(), () -> plugin.finishRun(), d.runActive));
 		runTab.add(text("Patches tick when you check health or plant, in any order. Opening your bank ticks the next "
-			+ "bank stop. Growth timers and run XP are saved when you press Finish run.", MUTED));
+			+ "bank stop. Growth timers, run time and profit are saved when you press Finish run.", MUTED));
 		if (d.lastMatch != null)
 		{
 			runTab.add(text("Last ticked: " + d.lastMatch, GOOD));
@@ -667,18 +640,40 @@ class TreeRunningPanel extends PluginPanel
 			runTab.add(Box.createVerticalStrut(4));
 			runTab.add(doneBox(d));
 		}
+		runTab.add(bankFilterBox(d, TreeRunningConfig.BankFilter.TREE));
+
+		if (!d.unpaid.isEmpty())
+		{
+			StringBuilder names = new StringBuilder();
+			for (RunTask task : d.tasks)
+			{
+				if (d.unpaid.contains(task.getKey()))
+				{
+					names.append(names.length() > 0 ? ", " : "").append(patchLabel(task)).append(" (").append(task.getStep().getDisplayName()).append(")");
+				}
+			}
+			runTab.add(text("Not paid yet: " + names + ". Pay the gardener to protect it; they're outlined in game.", PAY));
+		}
+		if (d.overflow != null)
+		{
+			runTab.add(text("This run needs about " + d.overflow.getSlots() + " inventory slots between bank stops"
+				+ (d.overflow.getBankBefore() != null ? ". Add a bank stop before " + d.overflow.getBankBefore().getDisplayName() : "")
+				+ ", or wear your teleport items.", BAD));
+		}
 
 		if (!d.needs.isEmpty())
 		{
 			runTab.add(Box.createVerticalStrut(4));
-			runTab.add(needsBox(d.needs));
+			runTab.add(needsBox(d.needs, d.slots));
 		}
 
+		long now = System.currentTimeMillis();
 		RouteStep currentStep = null;
 		for (RouteItem item : d.items)
 		{
 			if (item.getStep() != currentStep)
 			{
+				addOnTheWay(d, currentStep);
 				currentStep = item.getStep();
 				JLabel location = heading(currentStep.getDisplayName());
 				location.setForeground(ColorScheme.BRAND_ORANGE);
@@ -701,26 +696,396 @@ class TreeRunningPanel extends PluginPanel
 			else
 			{
 				RunTask task = item.getTask();
-				// Only "Ready in…" is shown; patches that need a higher level are just greyed out.
 				String note = !task.isDue() && task.getNote() != null && task.getNote().startsWith("Ready")
 					? " (" + task.getNote() + ")" : "";
-				box = checkBox(patchLabel(task) + note, d.done.contains(key));
-				box.setForeground(task.isDue() ? Color.WHITE : MUTED);
-				// Due patches can always be ticked or unticked; a ticked one can always be unticked.
+				String state = stateLabel(d.seen.get(key), now);
+				String pay = d.done.contains(key) && task.getCrop().getPayment() != null && task.getLocation().getGardener() >= 0
+					? (d.paid.contains(key) ? " · paid" : " · not paid") : "";
+				box = checkBox(patchLabel(task) + note + state + pay, d.done.contains(key));
+				SeenPatch s = d.seen.get(key);
+				boolean bad = s != null && (s.condition == PatchCondition.DISEASED || s.condition == PatchCondition.DEAD);
+				box.setForeground(bad ? BAD : d.unpaid.contains(key) ? PAY : task.isDue() ? Color.WHITE : MUTED);
 				box.setEnabled(task.isDue() || d.done.contains(key));
 			}
 			box.addActionListener(e -> plugin.toggleTask(key));
 			runTab.add(box);
 		}
+		addOnTheWay(d, currentStep);
 
 		if (d.tasks.isEmpty())
 		{
-			runTab.add(text("No patches enabled. Turn some on under Settings in the XP tab.", MUTED));
+			runTab.add(text("No patches on. Turn some on in the settings (Tree patches).", MUTED));
 		}
 	}
 
+	/** "Herbs on the way": grown herb patches at a tree-run stop. */
+	private void addOnTheWay(PanelData d, RouteStep step)
+	{
+		if (step == null)
+		{
+			return;
+		}
+		for (HerbTask herb : d.onTheWay.getOrDefault(step, Collections.emptyList()))
+		{
+			String plantKey = herb.stepKey(HerbTask.PLANT);
+			JCheckBox box = checkBox("Herb: " + herb.getPlantName() + " (" + herb.getCondition().getLabel().toLowerCase() + ")",
+				d.herbDone.contains(plantKey));
+			box.setForeground(HERB);
+			box.setToolTipText("Herbs on the way. Ticks itself when you plant; it's saved with your herb runs.");
+			box.addActionListener(e -> plugin.toggleHerbStep(plantKey));
+			runTab.add(box);
+		}
+	}
+
+	/** " – grown", " – diseased" and so on, from when the patch was last seen. */
+	private static String stateLabel(SeenPatch s, long now)
+	{
+		if (s == null || s.condition == PatchCondition.UNKNOWN)
+		{
+			return "";
+		}
+		PatchCondition c = s.predict(now);
+		switch (c)
+		{
+			case GROWING:
+				return "";
+			case GROWN:
+				return s.condition == PatchCondition.GROWING ? " – should be grown" : " – grown";
+			default:
+				return " – " + c.getLabel().toLowerCase();
+		}
+	}
+
+	private JComponent bankFilterBox(PanelData d, TreeRunningConfig.BankFilter mode)
+	{
+		JCheckBox box = checkBox("Filter bank to this run", d.bankFilter == mode);
+		box.setToolTipText("Shows only what this run needs when you open the bank. Also on the bank's \"Show worn items\" right-click menu.");
+		box.addActionListener(e -> plugin.setBankFilter(box.isSelected() ? mode : TreeRunningConfig.BankFilter.OFF));
+		return box;
+	}
+
+	private static JPanel runButtons(Runnable start, Runnable finish, boolean active)
+	{
+		JPanel buttons = new JPanel(new GridLayout(1, 2, 4, 0));
+		buttons.setOpaque(false);
+		JButton startButton = button("New run");
+		startButton.addActionListener(e -> start.run());
+		JButton finishButton = button("Finish run");
+		finishButton.setEnabled(active);
+		finishButton.addActionListener(e -> finish.run());
+		buttons.add(startButton);
+		buttons.add(finishButton);
+		buttons.setMaximumSize(new Dimension(Integer.MAX_VALUE, 26));
+		buttons.setAlignmentX(LEFT_ALIGNMENT);
+		return buttons;
+	}
+
+	// ------------------------------------------------------------------ Herbs tab
+
+	private void buildHerbs(PanelData d)
+	{
+		herbTab.removeAll();
+		if (!d.loggedIn)
+		{
+			herbTab.add(text("Log in to see your herb patches.", MUTED));
+			return;
+		}
+		if (d.herbTasks.isEmpty())
+		{
+			herbTab.add(heading("No herb patches on"));
+			herbTab.add(text("Turn herb patches on in RuneLite's settings: the wrench, then Tree Running, then Herb patches.", MUTED));
+			return;
+		}
+
+		long now = System.currentTimeMillis();
+		int herbPatches = 0;
+		int ready = 0;
+		long nextGrown = 0;
+		String nextName = null;
+		long allGrown = 0;
+		for (HerbTask task : d.herbTasks)
+		{
+			if (task.isAllotment())
+			{
+				continue;
+			}
+			herbPatches++;
+			if (task.isDue())
+			{
+				ready++;
+			}
+			else if (task.getReadyAt() > 0)
+			{
+				if (nextGrown == 0 || task.getReadyAt() < nextGrown)
+				{
+					nextGrown = task.getReadyAt();
+					nextName = task.getLocation().getDisplayName();
+				}
+				allGrown = Math.max(allGrown, task.getReadyAt());
+			}
+		}
+		herbTab.add(heading(d.herbActive
+			? "Herb run in progress: " + d.herbPlantedCount() + "/" + d.herbDueCount()
+			: ready + " of " + herbPatches + " herb patches ready"));
+		if (nextName != null)
+		{
+			herbTab.add(text("Next grown: " + nextName + " in " + duration(nextGrown - now) + ". All grown in "
+				+ duration(allGrown - now) + ".", MUTED));
+		}
+		if (d.herbActive && d.herbStartedAt > 0)
+		{
+			herbTab.add(text("Started " + Instant.ofEpochMilli(d.herbStartedAt).atZone(ZoneId.systemDefault()).format(CLOCK)
+				+ " · " + duration(now - d.herbStartedAt) + " so far", MUTED));
+		}
+		herbTab.add(runButtons(() -> plugin.startNewHerbRun(), () -> plugin.finishHerbRun(), d.herbActive));
+		herbTab.add(bankFilterBox(d, TreeRunningConfig.BankFilter.HERB));
+		if (d.herbLastMatch != null)
+		{
+			herbTab.add(text("Last: " + d.herbLastMatch, GOOD));
+		}
+
+		// Patches
+		herbTab.add(section("Patches"));
+		for (HerbTask task : d.herbTasks)
+		{
+			herbTab.add(patchCard(d, task, now));
+		}
+		herbTab.add(text("DF is disease-free. Choose each patch's herb in the settings, so your most valuable seeds go in "
+			+ "the DF patches.", MUTED));
+
+		// Needs
+		herbTab.add(section("This run needs"));
+		herbTab.add(herbNeedsBox(d));
+
+		// Checklist
+		herbTab.add(section("Run checklist"));
+		HerbLocation current = null;
+		List<String> growing = new ArrayList<>();
+		for (HerbTask task : d.herbTasks)
+		{
+			if (!task.isDue())
+			{
+				growing.add(task.getLocation().getDisplayName() + (task.isAllotment() ? " " + task.getLabel().toLowerCase() : "")
+					+ (task.getReadyAt() > 0 ? " (" + duration(task.getReadyAt() - now) + ")" : ""));
+				continue;
+			}
+			if (task.getLocation() != current)
+			{
+				current = task.getLocation();
+				JLabel loc = heading(current.getDisplayName() + (current.isDiseaseFree() ? "  DF" : ""));
+				loc.setForeground(ColorScheme.BRAND_ORANGE);
+				herbTab.add(Box.createVerticalStrut(4));
+				herbTab.add(loc);
+				herbTab.add(text(current.getTravel(), MUTED));
+			}
+			if (task.isAllotment())
+			{
+				herbTab.add(small(task.getLabel(), ColorScheme.LIGHT_GRAY_COLOR));
+			}
+			for (HerbTask.Step step : task.getSteps())
+			{
+				String stepKey = task.stepKey(step.getId());
+				JCheckBox box = checkBox(step.getLabel(), d.herbDone.contains(stepKey));
+				box.addActionListener(e -> plugin.toggleHerbStep(stepKey));
+				herbTab.add(box);
+			}
+		}
+		if (!growing.isEmpty())
+		{
+			herbTab.add(text("Still growing: " + String.join(", ", growing), MUTED));
+		}
+
+		// Profit this run
+		herbTab.add(section("Profit: this run"));
+		if (d.herbActive || d.herbPicked > 0)
+		{
+			herbTab.add(row("Herbs and crops picked", NUM.format(d.herbPicked)));
+			herbTab.add(row("Harvest value", gp(d.herbValue)));
+			herbTab.add(gpRow("Seeds, compost, payments", -d.herbCost));
+			herbTab.add(gpRow("Profit", d.herbValue - d.herbCost));
+			herbTab.add(row("Farming XP", NUM.format(d.herbXp)));
+		}
+		else
+		{
+			herbTab.add(text("Starts when you harvest, compost or plant the first patch.", MUTED));
+		}
+
+		// History
+		herbTab.add(section("Herb run history"));
+		addHistory(herbTab, d.herbRuns, i -> plugin.deleteHerbRun(i), () -> plugin.clearHerbHistory(), true);
+
+		// Picker
+		herbTab.add(section("Which herb pays best"));
+		herbTab.add(text("Per patch at live prices, after the seed and compost, with the bonuses in your settings. "
+			+ "Disease-free patches do a little better.", MUTED));
+		JPanel grid = supplyGrid();
+		addSupplyRow(grid, "Herb", "Lvl", "Profit", "XP", ColorScheme.LIGHT_GRAY_COLOR, ColorScheme.LIGHT_GRAY_COLOR);
+		for (HerbPlanner.Estimate e : d.picker)
+		{
+			addSupplyRow(grid, e.getHerb().getDisplayName(), String.valueOf(e.getHerb().getLevel()), gp(e.getProfit()),
+				NUM.format(Math.round(e.getXp())), Color.WHITE, e.getProfit() >= 0 ? GOOD : BAD);
+		}
+		herbTab.add(grid);
+	}
+
+	private JComponent patchCard(PanelData d, HerbTask task, long now)
+	{
+		JPanel card = new JPanel(new BorderLayout(4, 0));
+		card.setBackground(ColorScheme.DARKER_GRAY_COLOR);
+		card.setBorder(BorderFactory.createCompoundBorder(
+			BorderFactory.createLineBorder(ColorScheme.MEDIUM_GRAY_COLOR), new EmptyBorder(3, 5, 3, 5)));
+		card.setAlignmentX(LEFT_ALIGNMENT);
+
+		String name = task.getLocation().getDisplayName() + (task.isAllotment() ? " · " + task.getLabel().replace(" allotment", "") : "");
+		JPanel left = new JPanel(new GridLayout(2, 1));
+		left.setOpaque(false);
+		JLabel title = small(name + (task.getLocation().isDiseaseFree() && !task.isAllotment() ? "  DF" : ""), Color.WHITE);
+		title.setFont(FontManager.getRunescapeBoldFont());
+		left.add(title);
+		Long est = d.herbEstimates.get(task.getKey());
+		left.add(small(task.getPlantName() + (est != null ? " · ≈ " + gp(est) : ""), task.isAllotment() ? ColorScheme.LIGHT_GRAY_COLOR : HERB));
+		card.add(left, BorderLayout.CENTER);
+
+		String chip;
+		Color color;
+		switch (task.getCondition())
+		{
+			case GROWING:
+				chip = task.getReadyAt() > 0 ? duration(task.getReadyAt() - now) : "Growing";
+				color = WARN;
+				break;
+			case DISEASED:
+				chip = "Diseased";
+				color = BAD;
+				break;
+			case DEAD:
+				chip = "Dead";
+				color = BAD;
+				break;
+			case EMPTY:
+				chip = "Empty";
+				color = ColorScheme.LIGHT_GRAY_COLOR;
+				break;
+			case UNKNOWN:
+				chip = "Not seen";
+				color = MUTED;
+				break;
+			default:
+				chip = "Ready";
+				color = GOOD;
+				break;
+		}
+		JLabel state = small(chip, color);
+		state.setFont(FontManager.getRunescapeBoldFont());
+		card.add(state, BorderLayout.EAST);
+		card.setMaximumSize(new Dimension(Integer.MAX_VALUE, 38));
+		return card;
+	}
+
+	private JComponent herbNeedsBox(PanelData d)
+	{
+		JPanel box = column();
+		box.setBackground(ColorScheme.DARKER_GRAY_COLOR);
+		box.setBorder(BorderFactory.createCompoundBorder(
+			BorderFactory.createLineBorder(ColorScheme.MEDIUM_GRAY_COLOR), new EmptyBorder(5, 6, 5, 6)));
+		int shortCount = 0;
+		for (HerbPlanner.Need n : d.herbNeeds)
+		{
+			if (n.isShort())
+			{
+				shortCount++;
+			}
+		}
+		JPanel head = new JPanel(new BorderLayout());
+		head.setOpaque(false);
+		JLabel title = small("This run needs", Color.WHITE);
+		title.setFont(FontManager.getRunescapeBoldFont());
+		head.add(title, BorderLayout.WEST);
+		head.add(small(shortCount > 0 ? shortCount + " short" : d.herbNeeds.isEmpty() ? "" : "All carried", shortCount > 0 ? BAD : MUTED),
+			BorderLayout.EAST);
+		head.setAlignmentX(LEFT_ALIGNMENT);
+		head.setMaximumSize(new Dimension(Integer.MAX_VALUE, 18));
+		box.add(head);
+		if (d.herbNeeds.isEmpty())
+		{
+			box.add(small("Nothing left to plant.", MUTED));
+		}
+		for (HerbPlanner.Need n : d.herbNeeds)
+		{
+			box.add(needRow(n.isShort() ? n.getCarried() + "/" + n.getNeeded() : NUM.format(n.getNeeded()), n.getName(),
+				n.isShort() ? BAD : Color.WHITE));
+		}
+		if (d.compost.isBottomless())
+		{
+			box.add(needRow("1", "Bottomless compost bucket (filled)", d.compostCarried ? Color.WHITE : BAD));
+		}
+		box.add(needRow("1", "Spade, seed dibber" + (anyEmpty(d) ? ", rake" : ""), Color.WHITE));
+		if (d.secateursExpected)
+		{
+			box.add(text(d.secateursCarried ? "Magic secateurs: with you (+10% herbs)" : "Magic secateurs aren't with you: about 10% fewer herbs",
+				d.secateursCarried ? GOOD : BAD));
+		}
+		box.setAlignmentX(LEFT_ALIGNMENT);
+		box.setMaximumSize(new Dimension(Integer.MAX_VALUE, box.getPreferredSize().height + 4));
+		return box;
+	}
+
+	private static boolean anyEmpty(PanelData d)
+	{
+		for (HerbTask t : d.herbTasks)
+		{
+			if (t.getCondition() == PatchCondition.EMPTY)
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+
+	private static JPanel needRow(String count, String name, Color countColor)
+	{
+		JPanel row = new JPanel(new BorderLayout(6, 0));
+		row.setOpaque(false);
+		JLabel n = number(count);
+		n.setForeground(countColor);
+		n.setPreferredSize(new Dimension(40, 15));
+		row.add(n, BorderLayout.WEST);
+		row.add(small(name, ColorScheme.LIGHT_GRAY_COLOR), BorderLayout.CENTER);
+		row.setAlignmentX(LEFT_ALIGNMENT);
+		row.setMaximumSize(new Dimension(Integer.MAX_VALUE, 17));
+		return row;
+	}
+
+	private static JPanel gpRow(String label, long gp)
+	{
+		JPanel panel = row(label, gp(gp));
+		JLabel value = (JLabel) panel.getComponent(1);
+		value.setForeground(gp > 0 ? GOOD : gp < 0 ? BAD : Color.WHITE);
+		return panel;
+	}
+
+	/** +1.2M, −45k, 950. */
+	static String gp(long n)
+	{
+		String sign = n > 0 ? "+" : n < 0 ? "−" : "";
+		return sign + compact(Math.abs(n));
+	}
+
+	/** 1h 05m, 12m 30s. */
+	static String duration(long ms)
+	{
+		long s = Math.max(0, ms) / 1000;
+		long h = s / 3600;
+		long m = (s % 3600) / 60;
+		if (h > 0)
+		{
+			return h + "h " + String.format("%02dm", m);
+		}
+		return m + "m " + String.format("%02ds", s % 60);
+	}
+
 	/** One line per crop: saplings and protection, colored by patch type. */
-	private JComponent needsBox(List<RunNeeds.Line> needs)
+	private JComponent needsBox(List<RunNeeds.Line> needs, int slots)
 	{
 		JPanel box = new JPanel(new GridBagLayout());
 		box.setBackground(ColorScheme.DARKER_GRAY_COLOR);
@@ -741,7 +1106,7 @@ class TreeRunningPanel extends PluginPanel
 		c.weightx = 1;
 		box.add(title, c);
 		int shortCount = RunNeeds.shortCount(needs);
-		JLabel total = small(shortCount > 0 ? shortCount + " short" : RunNeeds.totalSaplings(needs) + " to plant",
+		JLabel total = small(shortCount > 0 ? shortCount + " short" : RunNeeds.totalSaplings(needs) + " to plant · " + slots + "/28 slots",
 			shortCount > 0 ? BAD : MUTED);
 		total.setToolTipText("Have / need, counting your inventory");
 		total.setHorizontalAlignment(SwingConstants.RIGHT);
@@ -812,6 +1177,7 @@ class TreeRunningPanel extends PluginPanel
 		box.setMaximumSize(new Dimension(Integer.MAX_VALUE, box.getPreferredSize().height + 4));
 		return box;
 	}
+
 
 	// ------------------------------------------------------------------ Supplies tab
 
@@ -930,61 +1296,6 @@ class TreeRunningPanel extends PluginPanel
 	}
 
 	// ------------------------------------------------------------------ small widgets
-
-	private <E> JComboBox<E> combo(E[] values, E selected, String key)
-	{
-		JComboBox<E> box = new JComboBox<>(values);
-		box.setSelectedItem(selected);
-		box.addActionListener(e ->
-		{
-			if (!loading)
-			{
-				plugin.setSetting(key, box.getSelectedItem());
-			}
-		});
-		return box;
-	}
-
-	private JSpinner spinner(int value, int min, int max, String key)
-	{
-		JSpinner spinner = new JSpinner(new SpinnerNumberModel(Math.max(min, Math.min(max, value)), min, max, 1));
-		spinner.addChangeListener(e ->
-		{
-			if (!loading)
-			{
-				plugin.setSetting(key, spinner.getValue());
-			}
-		});
-		return spinner;
-	}
-
-	private JComponent checkField(String label, boolean value, String key)
-	{
-		JCheckBox box = checkBox(label, value);
-		box.addActionListener(e ->
-		{
-			if (!loading)
-			{
-				plugin.setSetting(key, box.isSelected());
-			}
-		});
-		return box;
-	}
-
-	private static JComponent field(String label, JComponent control)
-	{
-		JPanel panel = new JPanel(new BorderLayout(6, 0));
-		panel.setOpaque(false);
-		JLabel l = small(label, ColorScheme.LIGHT_GRAY_COLOR);
-		control.setPreferredSize(new Dimension(100, 24));
-		control.setFont(FontManager.getRunescapeSmallFont());
-		panel.add(l, BorderLayout.CENTER);
-		panel.add(control, BorderLayout.EAST);
-		panel.setMaximumSize(new Dimension(Integer.MAX_VALUE, 26));
-		panel.setBorder(new EmptyBorder(1, 0, 1, 0));
-		panel.setAlignmentX(LEFT_ALIGNMENT);
-		return panel;
-	}
 
 	private static void styleInput(JTextField field)
 	{

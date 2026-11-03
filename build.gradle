@@ -39,6 +39,8 @@ tasks.withType(JavaCompile).configureEach {
 test {
 	filter {
 		includeTestsMatching 'com.treerunning.core.*'
+		includeTestsMatching 'com.treerunning.RunStateTest'
+		includeTestsMatching 'com.treerunning.data.*'
 	}
 }
 

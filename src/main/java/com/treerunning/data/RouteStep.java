@@ -73,7 +73,11 @@ public enum RouteStep
 	FOSSIL_ISLAND("Fossil Island",
 		"Digsite pendant → Fossil Island, Mushroom Forest",
 		null,
-		"Digsite pendant");
+		"Digsite pendant"),
+	PRIFDDINAS("Prifddinas",
+		"Teleport crystal → Prifddinas, run north-east",
+		"Prifddinas bank",
+		"Teleport crystal");
 
 	/** Used when neither side of a bank stop has a bank nearby. */
 	public static final String FALLBACK_BANK = "Teleport to house → jewellery box: Ring of dueling → Castle Wars bank";

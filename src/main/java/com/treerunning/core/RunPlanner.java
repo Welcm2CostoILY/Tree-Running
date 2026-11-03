@@ -1,6 +1,7 @@
 package com.treerunning.core;
 
 import com.treerunning.data.CropType;
+import com.treerunning.data.PatchCondition;
 import com.treerunning.data.PatchLocation;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -68,6 +69,40 @@ public final class RunPlanner
 			}
 		}
 		return tasks;
+	}
+
+	/**
+	 * Uses what each patch looked like when you last saw it, when that's newer than its timer:
+	 * a patch still growing isn't due, and a grown, diseased, dead or empty one is.
+	 *
+	 * @param seen      last seen state by task key
+	 * @param plantedAt when each patch was last planted on a finished run
+	 */
+	public static List<RunTask> applySeen(List<RunTask> tasks, Map<String, SeenPatch> seen, Map<String, Long> plantedAt, long now)
+	{
+		List<RunTask> out = new ArrayList<>(tasks.size());
+		for (RunTask task : tasks)
+		{
+			SeenPatch s = seen.get(task.getKey());
+			Long planted = plantedAt.get(task.getKey());
+			boolean levelTooLow = task.getNote() != null && task.getNote().startsWith("Needs");
+			if (s == null || levelTooLow || s.condition == PatchCondition.UNKNOWN || (planted != null && s.seenAt < planted))
+			{
+				out.add(task);
+				continue;
+			}
+			PatchCondition now2 = s.predict(now);
+			if (now2 == PatchCondition.GROWING && !s.isWeeds())
+			{
+				out.add(new RunTask(task.getLocation(), task.getIndex(), task.getCrop(), false,
+					"Ready in " + formatDuration(s.readyBy() - now)));
+			}
+			else
+			{
+				out.add(new RunTask(task.getLocation(), task.getIndex(), task.getCrop(), true, task.getNote()));
+			}
+		}
+		return out;
 	}
 
 	static String formatDuration(long millis)

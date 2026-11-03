@@ -190,13 +190,7 @@ h1 { font-size: 22px; color: var(--white); margin: 0 0 6px; }
 
     <h3>Settings: Crop labels</h3>
     <label><input type="checkbox" id="labelsBox" checked> Label seeds and saplings</label>
-    <div class="note" style="margin-top:6px">Position</div>
-    <div class="seg" id="posSeg">
-      <button aria-pressed="true" data-v="top">Top</button>
-      <button aria-pressed="false" data-v="topright">Top right</button>
-      <button aria-pressed="false" data-v="bottom">Bottom</button>
-    </div>
-    <div class="note">In the bank, the stack count sits top-left, so a top label can sit on it. Try each position on the seed stacks.</div>
+    <div class="note">Shown along the bottom of the item, clear of the stack count.</div>
     <label><input type="checkbox" id="allCropsBox"> Label every tree crop, not just mine</label>
     <h3>Labels</h3>
     <div class="legend" id="legend"></div>
@@ -207,7 +201,7 @@ h1 { font-size: 22px; color: var(--white); margin: 0 0 6px; }
   <h2>How it would work</h2>
   <ul>
     <li><b>Filter:</b> uses RuneLite's own bank tag API, the way Inventory Setups does. The plugin registers a hidden "Tree run" tag whose items are worked out live from the run, so nothing is added to your saved bank tags.</li>
-    <li><b>Labels:</b> drawn over the item, in the bank, inventory and seed vault. Names of 4 letters or fewer are shown whole. Longer names are cut to 4 letters, such as Iron, Calq, Papa and Cela.</li>
+    <li><b>Labels:</b> drawn along the bottom of the item, in the bank, inventory and seed vault. Names of 4 letters or fewer are shown whole. Longer names are cut to 4 letters, such as Iron, Calq, Papa and Cela.</li>
     <li><b>Already in RuneLite:</b> the built-in <i>Item Identification</i> plugin can label seeds and saplings too, at the bottom, in capitals. If you turn this on, turn off its seed and sapling options so you don't get two labels.</li>
   </ul>
 </div>
@@ -307,7 +301,7 @@ function icon(kind, crop, noted) {
 }
 
 // ---------- state ----------
-const state = { filter: false, scope: "left", labels: true, pos: "top", allCrops: false, ticked: 0 };
+const state = { filter: false, scope: "left", labels: true, pos: "bottom", allCrops: false, ticked: 0 };
 
 function remaining() {
   return state.scope === "all" ? RUN : RUN.slice(state.ticked);
@@ -349,7 +343,6 @@ function render() {
   document.getElementById("labelsBox").checked = state.labels;
   document.getElementById("allCropsBox").checked = state.allCrops;
   for (const b of document.querySelectorAll("#scopeSeg button")) b.setAttribute("aria-pressed", b.dataset.v === state.scope);
-  for (const b of document.querySelectorAll("#posSeg button")) b.setAttribute("aria-pressed", b.dataset.v === state.pos);
 
   const left = RUN.length - state.ticked;
   document.getElementById("runStatus").textContent = left > 0
@@ -367,7 +360,6 @@ document.getElementById("filterBox").addEventListener("change", e => { state.fil
 document.getElementById("labelsBox").addEventListener("change", e => { state.labels = e.target.checked; render(); });
 document.getElementById("allCropsBox").addEventListener("change", e => { state.allCrops = e.target.checked; render(); });
 document.getElementById("scopeSeg").addEventListener("click", e => { if (e.target.dataset.v) { state.scope = e.target.dataset.v; render(); } });
-document.getElementById("posSeg").addEventListener("click", e => { if (e.target.dataset.v) { state.pos = e.target.dataset.v; render(); } });
 document.getElementById("tickBtn").addEventListener("click", () => { state.ticked = Math.min(RUN.length, state.ticked + 1); render(); });
 document.getElementById("resetBtn").addEventListener("click", () => { state.ticked = 0; render(); });
 

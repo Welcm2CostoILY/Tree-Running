@@ -35,7 +35,7 @@ A RuneLite plugin for daily OSRS Farming tree runs toward a goal, such as 99 Far
   - `TreeRunningPlugin`: events, run state and settings persistence.
   - `TreeRunningPanel`: Swing UI with XP, Trees, Herbs and Supplies tabs. Settings are in RuneLite's config panel (sections in `TreeRunningConfig`); only the route editor (bank stops, stop/patch order, travel notes) stays in the XP tab.
   - `TrackedPatch`: every tree/herb/allotment patch with its key, varbit and gardener. Patches are read once per game tick at the player's position (not on VarbitChanged, which can arrive before a teleport moves you).
-  - Bank filter: `@PluginDependency(BankTagsPlugin.class)`, `TagManager.registerTag` for two hidden tags, opened with `BankTagsService.openBankTag` on BANKMAIN_INIT and from the "Show worn items" menu.
+  - Bank filter: `@PluginDependency(BankTagsPlugin.class)`, `TagManager.registerTag` for two hidden tags, opened with `BankTagsService.openBankTag` on WidgetLoaded(BANKMAIN) via invokeLater and from the "Show worn items" menu.
   - `TreeRunningOverlay`: the checklist overlay.
   - `PatchHighlightOverlay`: patch outlines.
   - `PanelData`: an immutable snapshot that the client thread publishes to Swing and the overlays.

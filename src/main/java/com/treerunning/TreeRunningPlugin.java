@@ -235,6 +235,8 @@ public class TreeRunningPlugin extends Plugin
 
 	private volatile Set<Integer> treeTagItems = Collections.emptySet();
 	private volatile Set<Integer> herbTagItems = Collections.emptySet();
+	/** The bank interface opened and the filter hasn't been applied to it yet. */
+	private boolean bankFilterPending;
 
 	@Provides
 	TreeRunningConfig provideConfig(ConfigManager configManager)
@@ -548,6 +550,10 @@ public class TreeRunningPlugin extends Plugin
 			state.bank = countTracked(event.getItemContainer());
 			state.bankSeenAt = System.currentTimeMillis();
 			tickBankStopIfNext();
+			if (bankFilterPending)
+			{
+				applyBankFilterOnOpen();
+			}
 			saveState();
 			refresh();
 		}
@@ -644,24 +650,30 @@ public class TreeRunningPlugin extends Plugin
 		{
 			return;
 		}
-		clientThread.invokeLater(() ->
+		// The bank's items can arrive just after the interface; whichever comes last opens the filter.
+		bankFilterPending = true;
+		clientThread.invokeLater(this::applyBankFilterOnOpen);
+	}
+
+	private void applyBankFilterOnOpen()
+	{
+		if (!isBankOpen())
 		{
-			if (!isBankOpen())
-			{
-				return;
-			}
-			TreeRunningConfig.BankFilter mode = config.bankFilter();
-			String active = bankTagsService.getActiveTag();
-			if (mode != TreeRunningConfig.BankFilter.OFF)
-			{
-				openBankFilter(mode);
-			}
-			else if (TREE_TAG.equals(active) || HERB_TAG.equals(active))
-			{
-				// Bank Tags remembers the last tab; don't come back filtered after turning it off.
-				bankTagsService.closeBankTag();
-			}
-		});
+			debug.log(client.getTickCount(), "Bank interface loaded, items not in yet");
+			return;
+		}
+		bankFilterPending = false;
+		TreeRunningConfig.BankFilter mode = config.bankFilter();
+		String active = bankTagsService.getActiveTag();
+		if (mode != TreeRunningConfig.BankFilter.OFF)
+		{
+			openBankFilter(mode);
+		}
+		else if (TREE_TAG.equals(active) || HERB_TAG.equals(active))
+		{
+			// Bank Tags remembers the last tab; don't come back filtered after turning it off.
+			bankTagsService.closeBankTag();
+		}
 	}
 
 	@Subscribe

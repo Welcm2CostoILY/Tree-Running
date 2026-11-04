@@ -60,6 +60,7 @@ tasks.register('panelSnapshot', JavaExec) {
 	classpath = sourceSets.test.runtimeClasspath
 	mainClass = 'com.treerunning.PanelSnapshot'
 	systemProperty 'java.awt.headless', 'true'
+	systemProperty 'snapshotScale', System.getProperty('snapshotScale', '1')
 }
 
 // Dev tool: exports crop/route data and reference results for the HTML preview.

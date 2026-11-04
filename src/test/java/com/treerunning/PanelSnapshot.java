@@ -228,8 +228,12 @@ public class PanelSnapshot
 				tabs.setSelectedIndex(i);
 				panel.setSize(new Dimension(242, 2600));
 				layoutAll(panel);
-				BufferedImage image = new BufferedImage(242, 2600, BufferedImage.TYPE_INT_RGB);
+				int scale = Integer.getInteger("snapshotScale", 1);
+				BufferedImage image = new BufferedImage(242 * scale, 2600 * scale, BufferedImage.TYPE_INT_RGB);
 				Graphics2D g = image.createGraphics();
+				g.setRenderingHint(java.awt.RenderingHints.KEY_TEXT_ANTIALIASING, java.awt.RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+				g.setRenderingHint(java.awt.RenderingHints.KEY_ANTIALIASING, java.awt.RenderingHints.VALUE_ANTIALIAS_ON);
+				g.scale(scale, scale);
 				panel.printAll(g);
 				g.dispose();
 				try
